@@ -1,0 +1,62 @@
+[
+  {
+    "id": "svagen_sva",
+    "original": "He go to store every day.",
+    "expected_correction": "He goes to store every day.",
+    "expected_errors": ["R:VERB:SVA"]
+  },
+  {
+    "id": "sva_det",
+    "original": "He go to store every day and buy milk.",
+    "expected_correction": "He goes to the store every day and buys milk.",
+    "expected_errors": ["R:VERB:SVA", "M:DET"]
+  },
+  {
+    "id": "verb_form",
+    "original": "She is go to school.",
+    "expected_correction": "She is going to school.",
+    "expected_errors": ["R:VERB:FORM"]
+  },
+  {
+    "id": "spelling",
+    "original": "I recieve a letter yesterday.",
+    "expected_correction": "I received a letter yesterday.",
+    "expected_errors": ["R:SPELL"]
+  },
+  {
+    "id": "missing_det",
+    "original": "I like book.",
+    "expected_correction": "I like the book.",
+    "expected_errors": ["M:DET"]
+  },
+  {
+    "id": "unnecessary_det",
+    "original": "He loves the music.",
+    "expected_correction": "He loves music.",
+    "expected_errors": ["U:DET"]
+  },
+  {
+    "id": "preposition",
+    "original": "She is good in math.",
+    "expected_correction": "She is good at math.",
+    "expected_errors": ["R:PREP"]
+  },
+  {
+    "id": "contraction",
+    "original": "He dont like apples.",
+    "expected_correction": "He doesn't like apples.",
+    "expected_errors": ["R:SPELL"]
+  },
+  {
+    "id": "noun_number",
+    "original": "I have two cat.",
+    "expected_correction": "I have two cats.",
+    "expected_errors": ["R:NOUN"]
+  },
+  {
+    "id": "verb_tense",
+    "original": "Yesterday he go to the park.",
+    "expected_correction": "Yesterday he went to the park.",
+    "expected_errors": ["R:VERB:TENSE"]
+  }
+]

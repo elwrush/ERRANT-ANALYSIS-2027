@@ -7,17 +7,19 @@ Pipelines student handwriting images through OCR transcription (Gemini via OpenR
 ## Slash commands
 
 - `/ingest-papers` — Transcribe handwritten essays from `inputs/` subfolders using `google/gemini-2.5-flash-lite-preview-09-2025`
+- `/local-errant-analysis` — Run ERRANT grammatical error analysis on transcribed essays
 
 ## Skills
 
 - `.kilo/skills/ingest-images/SKILL.md` — Full workflow for handwriting image ingestion and transcription
+- `.kilo/skills/errant-analysis/SKILL.md` — Full workflow for grammatical error analysis with ERRANT
 
 ## Python project
 
 | Item | Path |
 |------|------|
-| Main script | `src/ingest.py` |
-| Tests | `tests/test_ingest.py` |
+| Main script | `src/ingest.py` | `src/errant_analysis.py` |
+| Tests | `tests/test_ingest.py` | `tests/test_errant.py` |
 | Dependencies | `requirements.txt` |
 | Linter | `ruff` |
 | Test runner | `pytest` |
