@@ -3,3 +3,4 @@ requests>=2.31
 python-dotenv>=1.0
 errant>=3.0.0
 spacy>=3.7
+rapidfuzz>=3.0

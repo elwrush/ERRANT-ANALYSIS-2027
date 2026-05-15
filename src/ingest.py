@@ -15,8 +15,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_KEY = os.environ.get("OPENROUTER_API_KEY")
-if not API_KEY:
-    sys.exit("Error: OPENROUTER_API_KEY not set. Add it to .env or export it.")
 
 MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -120,6 +118,9 @@ def preprocess_image(image_path):
 
 
 def call_openrouter(data_url):
+    if not API_KEY:
+        print("  Error: OPENROUTER_API_KEY not set")
+        return None
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
@@ -233,9 +234,6 @@ def process_student_group(group, folder_name):
         else:
             print(f"    Warning: page {idx} returned empty text")
 
-        # Track token usage if available (OpenRouter returns usage info)
-        # Note: not strictly necessary for functionality but useful for logging
-
         jitter()
 
     if not page_texts:
@@ -249,7 +247,7 @@ def process_student_group(group, folder_name):
 
     out_dir = OUTPUTS_DIR / folder_name
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{student_id}.json"
+    out_path = out_dir / f"{final_id}.json"
 
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
@@ -259,6 +257,10 @@ def process_student_group(group, folder_name):
 
 
 def main():
+    if not API_KEY:
+        print("Error: OPENROUTER_API_KEY not set. Add it to .env or export it.")
+        sys.exit(1)
+
     folders = find_input_folders()
     if not folders:
         print(f"No subfolders found in {INPUTS_DIR}/")

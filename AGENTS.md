@@ -18,8 +18,8 @@ Pipelines student handwriting images through OCR transcription (Gemini via OpenR
 
 | Item | Path |
 |------|------|
-| Main script | `src/ingest.py` | `src/errant_analysis.py` |
-| Tests | `tests/test_ingest.py` | `tests/test_errant.py` |
+| Main script | `src/ingest.py`, `src/errant_analysis.py` |
+| Tests | `tests/test_ingest.py`, `tests/test_errant.py` |
 | Dependencies | `requirements.txt` |
 | Linter | `ruff` |
 | Test runner | `pytest` |

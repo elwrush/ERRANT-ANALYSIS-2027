@@ -116,3 +116,104 @@ class TestPostClassification:
         from errant_analysis import post_classify_other
         result = post_classify_other("in", "at")
         assert result == "R:PREP"
+
+
+class TestMetadata:
+    """Test the build_metadata function."""
+
+    def test_basic_metadata_shape(self):
+        from errant_analysis import build_metadata
+        meta = build_metadata([], "corrected", "original")
+        assert meta["model"] == "mistralai/mistral-small-3.2-24b-instruct"
+        assert meta["temperature"] == 0.1
+        assert meta["identity_check"] is False
+        assert meta["total_edit_count"] == 0
+        assert meta["overcorrection_count"] == 0
+        assert meta["edit_width_stats"]["max_span"] == 0
+        assert meta["edit_width_stats"]["avg_span"] == 0
+
+    def test_identity_detected(self):
+        from errant_analysis import build_metadata
+        meta = build_metadata([], "same text", "same text")
+        assert meta["identity_check"] is True
+
+    def test_overcorrection_flagged(self):
+        from errant_analysis import build_metadata, _make_edit
+        long_edit = _make_edit(1, 5, ["a", "b", "c", "d"], "a b c d", 1, 1, ["e"], "e", "R:OTHER")
+        meta = build_metadata([long_edit], "corrected", "original a b c d")
+        assert meta["overcorrection_count"] == 1
+        assert meta["edit_width_stats"]["max_span"] == 4
+
+    def test_edit_width_stats(self):
+        from errant_analysis import build_metadata, _make_edit
+        e1 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
+        e2 = _make_edit(1, 3, [], "c d", 1, 2, [], "e", "R:OTHER")
+        meta = build_metadata([e1, e2], "corrected", "a c d")
+        assert meta["total_edit_count"] == 2
+        assert meta["edit_width_stats"]["max_span"] == 2
+        assert meta["edit_width_stats"]["multi_token_edits"] == 1
+
+
+class TestIntersectEdits:
+    """Test edit intersection for double-check pass."""
+
+    def test_perfect_match(self):
+        from errant_analysis import intersect_edits, _make_edit
+        e1 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
+        e2 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
+        result = intersect_edits([e1], [e2])
+        assert len(result) == 1
+
+    def test_no_match(self):
+        from errant_analysis import intersect_edits, _make_edit
+        e1 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
+        e2 = _make_edit(0, 2, [], "a c", 0, 1, [], "d", "R:OTHER")
+        result = intersect_edits([e1], [e2])
+        assert len(result) == 0
+
+    def test_partial_match(self):
+        from errant_analysis import intersect_edits, _make_edit
+        e1 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
+        e2 = _make_edit(2, 3, [], "c", 2, 3, [], "d", "R:SPELL")
+        e3 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
+        e4 = _make_edit(5, 6, [], "e", 5, 6, [], "f", "M:DET")
+        result = intersect_edits([e1, e2], [e3, e4])
+        assert len(result) == 1
+        assert result[0].type == "R:VERB:TENSE"
+
+
+class TestWriteOutput:
+    """Test the write_output function."""
+
+    def test_identity_path(self):
+        from errant_analysis import write_output
+        from pathlib import Path
+
+        test_out = Path("local-working")
+        test_out.mkdir(parents=True, exist_ok=True)
+        result = write_output({
+            "student_id": "99999",
+            "original_text": "test",
+            "corrected_text": "test",
+            "sentence_pairs": [],
+            "errant_analysis": {"errors": [], "uncategorised": []},
+            "corrected_with_markup": "test",
+            "error_rate": 0,
+            "metadata": {
+                "identity_check": True,
+                "overcorrection_count": 0,
+                "model": "test",
+                "temperature": 0.1,
+                "total_edit_count": 0,
+                "uncertain_edit_count": 0,
+                "overcorrection_warnings": [],
+                "edit_width_stats": {"max_span": 0, "avg_span": 0, "multi_token_edits": 0},
+            },
+        }, Path("outputs/test_student/99999.json"))
+        assert result is not None
+        out_file = test_out / "test_student-99999.json"
+        assert out_file.exists()
+        with open(out_file) as f:
+            data = json.load(f)
+        assert data["metadata"]["identity_check"] is True
+        assert data["error_rate"] == 0
