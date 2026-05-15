@@ -199,6 +199,7 @@ class TestWriteOutput:
             "errant_analysis": {"errors": [], "uncategorised": []},
             "corrected_with_markup": "test",
             "error_rate": 0,
+            "word_count": 0,
             "metadata": {
                 "identity_check": True,
                 "overcorrection_count": 0,

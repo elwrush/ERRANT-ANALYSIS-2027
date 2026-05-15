@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Transcribe handwritten student essays from scanned images into structured JSON using a vision language model (Gemini 2.5 Flash Lite Preview) via OpenRouter. Handles multi-page essays, prompt caching, and rate-limited serial processing.
+Transcribe handwritten student essays from scanned images into structured JSON using a vision language model (Gemini 2.5 Flash Lite Preview) via OpenRouter. Handles multi-page essays and rate-limited serial processing.
 
 ## Prerequisites
 
@@ -18,20 +18,12 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 ## Input Format
 
-Images live in subfolders of `inputs/`. Naming convention:
+Place scanned images in subfolders of `inputs/`. Any JPEG or PNG filename is accepted — the script attempts to extract student ID and page number from filenames matching `{student_id}_{page_num}` for multi-page grouping. Files with unrecognizable names are treated as independent single-page essays with an auto-generated ID.
 
 ```
 inputs/
   {folder_name}/
-    {student_id}_{page_num}.jpg
-```
-
-Example — a 2-page essay by student 12345 and a 1-page essay by student 67890:
-
-```
-inputs/class_a/12345_1.jpg
-inputs/class_a/12345_2.jpg
-inputs/class_a/67890_1.jpg
+    any_images_here.jpg
 ```
 
 ## Usage
@@ -40,21 +32,21 @@ inputs/class_a/67890_1.jpg
 python src/ingest.py
 ```
 
-The script is interactive. It will:
-1. Scan `inputs/` for subfolders and show an enumerated list
-2. Ask you to pick one
-3. Ask how many image pages per essay (determines grouping)
-4. Process each student's pages serially with jitter between requests
-5. Write output JSONs to `outputs/{folder_name}/{student_id}.json`
+The script is fully interactive — once launched it handles all prompts directly:
+1. Scans `inputs/` for subfolders and shows a numbered list — user types the number to select a folder
+2. Asks for pages per essay — user types a numeral (e.g. `1`, `2`, `3`, `4`)
+3. Images named `{student_id}_{page_num}` are grouped automatically by student; unrecognized filenames become single-page essays with auto-generated IDs. Paragraphs are separated by `\n` in the output
+4. Processes each student's pages serially with jitter between requests
+5. Writes output JSONs to `outputs/{folder_name}/{student_id}.json`
 
 ## Output Format
 
-One JSON file per student. Multi-page essays have their text joined with `<br>`.
+One JSON file per student. Multi-page essays have their text joined with `\n`.
 
 ```json
 {
   "student_id": "12345",
-  "student_text": "Page 1 content with <br> paragraph breaks.<br>Page 2 content..."
+  "student_text": "Page 1 content with \n paragraph breaks.\nPage 2 content..."
 }
 ```
 
@@ -67,7 +59,6 @@ One JSON file per student. Multi-page essays have their text joined with `<br>`.
 | Input price | $0.10 / 1M tokens |
 | Output price | $0.40 / 1M tokens |
 | Measured cost | ~$0.03 / 100 images (benchmark) |
-| Prompt caching | Automatic (OpenRouter sticky routing) |
 
 ## Image Preprocessing
 
@@ -82,8 +73,8 @@ One JSON file per student. Multi-page essays have their text joined with `<br>`.
 
 - Transcribe verbatim — retain ALL spelling, grammar, and vocabulary errors
 - Extract 5-digit student ID from the ID field on the page (not from filename)
-- Paragraph breaks rendered as `<br>`; blank lines as `<br><br>`
-- No artificial line breaks within paragraphs
+- `\n` ONLY at actual paragraph boundaries — never for line wrapping
+- Never wrap at a fixed character width; each paragraph flows as one continuous line
 - Crossed-out/deleted text is SKIPPED entirely
 - Carats (^) and insertion symbols: insert words at intended position for natural flow
 

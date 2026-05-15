@@ -35,13 +35,13 @@ SYSTEM_PROMPT = """You are a handwriting transcription tool. Your task is to tra
 Rules:
 1. Extract the 5-digit student ID from the ID field on the page.
 2. Transcribe the essay text verbatim.
-3. Use <br> to mark paragraph breaks. Use <br><br> for a blank line between paragraphs.
-4. Do NOT introduce artificial line breaks within paragraphs. Preserve the natural flow of the writing.
+3. Insert a newline (\\n) ONLY where the writer intentionally began a new paragraph — indicated by indentation, a blank line, or a change in topic. Do NOT insert a newline at the end of every handwritten line; those are just page-edge line wraps and should flow continuously. A letter's salutation ("Dear X,") and closing ("Sincerely," / "See you soon!") are distinct paragraphs; separate them with \\n.
+4. NEVER wrap lines at a fixed character width. Each paragraph should read as one continuous line in the output, with no newlines except at actual paragraph boundaries.
 5. Do NOT render crossed-out or deleted text. Skip it entirely.
 6. If the writer used carats (^) or other insertion symbols, insert those words at their intended position so the natural flow of the passage is retained.
 
 Return ONLY a valid JSON object with exactly these keys:
-{"student_id": "5-digit number", "student_text": "the transcribed text with <br> for paragraph breaks"}
+{"student_id": "5-digit number", "student_text": "the transcribed text with \\n at paragraph boundaries"}
 
 No markdown, no code fences, no explanation — raw JSON only."""
 
@@ -82,6 +82,8 @@ def ask_page_count():
 def group_images(folder, pages_per_essay):
     pattern = re.compile(r"^(\d+)_(\d+)")
     images = []
+    orphans = []
+    auto_id_counter = 0
     for f in sorted(folder.iterdir()):
         if f.suffix.lower() in (".jpg", ".jpeg", ".png"):
             m = pattern.match(f.stem)
@@ -90,7 +92,9 @@ def group_images(folder, pages_per_essay):
                 page_num = int(m.group(2))
                 images.append((student_id, page_num, f))
             else:
-                print(f"  Warning: skipped file with unexpected name: {f.name}")
+                auto_id_counter += 1
+                sid = f"auto-{auto_id_counter:04d}"
+                orphans.append({"student_id": sid, "pages": [f]})
 
     groups = {}
     for student_id, page_num, path in images:
@@ -101,9 +105,13 @@ def group_images(folder, pages_per_essay):
     result = []
     for student_id, pages in groups.items():
         if len(pages) < pages_per_essay:
-            print(f"  Warning: student {student_id} has {len(pages)} pages, expected {pages_per_essay}. Processing with what exists.")
+            print(f"  Note: student {student_id} has {len(pages)} pages, expected {pages_per_essay}. Processing anyway.")
         result.append({"student_id": student_id, "pages": [p[1] for p in pages]})
     result.sort(key=lambda x: x["student_id"])
+
+    result.extend(orphans)
+    for o in orphans:
+        print(f"  Assigned auto-ID {o['student_id']} for {o['pages'][0].name}")
     return result
 
 
@@ -240,7 +248,7 @@ def process_student_group(group, folder_name):
         print(f"  No text transcribed for {student_id}, skipping.")
         return None
 
-    combined_text = "<br>".join(page_texts)
+    combined_text = "\n".join(page_texts)
     final_id = extracted_id or student_id
 
     output = {"student_id": final_id, "student_text": combined_text}

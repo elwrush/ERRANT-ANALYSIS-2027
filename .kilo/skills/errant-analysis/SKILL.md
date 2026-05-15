@@ -8,6 +8,7 @@ Take transcribed student essay JSONs (output from `ingest-images`), generate a g
 
 | Item | Path |
 |------|------|
+| Word count script | `src/add_word_count.py` |
 | Script | `src/errant_analysis.py` |
 | Tests | `tests/test_errant.py` |
 | Fixtures | `tests/fixtures/error_golden.json` |
@@ -22,6 +23,10 @@ python -m spacy download en_core_web_sm
 ## Input
 
 Select one of the JSON files from `outputs/`. These are produced by the `ingest-images` skill and contain `student_id` and `student_text`.
+
+## Pre-processing
+
+Before ERRANT analysis, run `python src/add_word_count.py` to count the actual words in each essay (splits on whitespace). This writes a `word_count` key to each input JSON, used later for error rate calculation.
 
 ## Output
 
@@ -113,9 +118,9 @@ The output JSON includes a `metadata` block with processing quality indicators:
 - `uncertain_edit_count`: edits found in only one of the two double-check passes
 - `edit_width_stats.max_span / avg_span / multi_token_edits`: edit size distribution
 
-## Codebase research via gh
+## Codebase research via gh — mandatory before guessing ERRANT internals
 
-If ERRANT produces unexpected output, use `gh api` to inspect the live upstream source — no clone needed:
+**Do NOT guess or hallucinate** the contents of ERRANT's classifier, merger, tokenizer, or any other `errant/en/*.py` file. The agent's training data knowledge of these files is unreliable. Instead, **always fetch the real upstream source** using the commands below:
 
 ```bash
 # View classifier source (classification rules)
@@ -128,4 +133,4 @@ gh api repos/chrisjbryant/errant/contents/errant/en/merger.py | python -c "impor
 gh api repos/chrisjbryant/errant/commits?path=errant/en/classifier.py | python -c "import sys,json; [print(c['commit']['message'].split(chr(10))[0]) for c in json.load(sys.stdin)]"
 ```
 
-Research from actual source — never hallucinate fixes.
+**Rule**: whenever you need to reason about what ERRANT does internally — a type code, a merge rule, a tokenization edge case — run the relevant `gh api` command first and read the actual source. Do not rely on training data knowledge of ERRANT's internals.

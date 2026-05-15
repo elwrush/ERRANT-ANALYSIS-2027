@@ -5,6 +5,7 @@ import sys
 import json
 import time
 import random
+import csv
 from pathlib import Path
 from dotenv import load_dotenv
 import requests
@@ -30,6 +31,9 @@ REQUEST_TIMEOUT = 45
 JITTER_MIN = 0.5
 JITTER_MAX = 1.5
 MULTI_TOKEN_THRESHOLD = 3
+SUMMARY_TEMPERATURE = 0.7
+
+STUDENTS_PATH = Path("docs/students.txt")
 
 
 CORRECTION_PROMPT = """You are a grammar correction tool. Correct the following student essay.
@@ -78,13 +82,20 @@ def show_menu(files):
 
 
 def call_model(text, temperature=TEMPERATURE):
-    if not API_KEY:
-        print("  Error: OPENROUTER_API_KEY not set")
-        return None
-
     est_tokens = len(text) // 4
     if est_tokens > MODEL_CONTEXT_LIMIT:
         print(f"  Error: text too long (~{est_tokens} tokens, limit {MODEL_CONTEXT_LIMIT})")
+        return None
+    return _call_api(CORRECTION_PROMPT.format(text=text), temperature)
+
+
+def call_model_custom(prompt_content, temperature=TEMPERATURE):
+    return _call_api(prompt_content, temperature)
+
+
+def _call_api(content, temperature):
+    if not API_KEY:
+        print("  Error: OPENROUTER_API_KEY not set")
         return None
 
     headers = {
@@ -95,7 +106,7 @@ def call_model(text, temperature=TEMPERATURE):
         "model": CORRECTION_MODEL,
         "temperature": temperature,
         "messages": [
-            {"role": "system", "content": CORRECTION_PROMPT.format(text=text)},
+            {"role": "system", "content": content},
         ],
     }
 
@@ -118,6 +129,85 @@ def call_model(text, temperature=TEMPERATURE):
                 return None
 
 
+SUMMARY_PROMPT = """Write a feedback paragraph in this exact format for {name}, a Thai ESL student (error rate: {error_rate}%):
+
+Hi {name},
+
+[One sentence of specific, genuine praise about their writing — mention something concrete they did well, like a word they used effectively or an idea they expressed clearly]
+
+I could mostly understand what you were saying, but your communication and grade will improve a lot if you pay special attention to the following mistakes:
+
+1. [Error type] — [simple explanation of what they did wrong]. For example, you wrote "[brief quote from their writing with the error]".
+2. [Error type] — [simple explanation]. For example, you wrote "[brief quote with error]".
+3. [Error type] — [simple explanation]. For example, you wrote "[brief quote with error]".
+
+Use ONLY errors from this list:
+{error_list}
+
+The student wrote this:
+{original_text}
+
+Output ONLY the feedback paragraph above. Nothing before or after."""
+
+
+def lookup_student_info(student_id: str) -> dict:
+    if not STUDENTS_PATH.exists():
+        return {}
+    with open(STUDENTS_PATH, "r", encoding="utf-8") as f:
+        reader = csv.reader(f, delimiter="\t")
+        next(reader, None)
+        for cols in reader:
+            if len(cols) >= 3 and cols[1].strip() == student_id:
+                return {"class": cols[0].strip(), "name": cols[2].strip()}
+    return {}
+
+
+def generate_summary(output: dict) -> str | None:
+    errors = output.get("errant_analysis", {}).get("errors", [])
+    if not errors:
+        return "Your writing was very accurate — no corrections were needed. Keep up the great work!"
+    top5 = errors[:5]
+    error_list = "\n".join(
+        f"- {e['type']}: {e['count']} time(s) (e.g. {e['example']})"
+        for e in top5
+    )
+    name = output.get("name", "student")
+    # Use first 200 chars of original text for quoting
+    sample = output.get("original_text", "")[:200]
+    prompt = SUMMARY_PROMPT.format(
+        name=name,
+        error_rate=output["error_rate"],
+        error_list=error_list,
+        original_text=sample,
+    )
+    result = call_model_custom(prompt, SUMMARY_TEMPERATURE)
+    if result:
+        result = result.encode("utf-8", errors="replace").decode("utf-8")
+    return result if result else f"Your writing had {output['error_rate']}% errors. Keep practicing!"
+
+
+def insert_error_reports(output: dict):
+    try:
+        from supabase import create_client
+        supabase_url = os.environ.get("SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_ESL_KEY")
+        if not supabase_url or not supabase_key:
+            print("  Supabase credentials not set — skipping error_reports insert")
+            return
+        client = create_client(supabase_url, supabase_key)
+        row = {
+            "student_id": output["student_id"],
+            "class": output.get("class", ""),
+            "name": output.get("name", ""),
+            "error_percent": output["error_rate"],
+            "summary": output.get("summary", ""),
+        }
+        client.table("error_reports").insert(row).execute()
+        print(f"  Inserted into error_reports for {output['student_id']}")
+    except Exception as e:
+        print(f"  Warning: could not insert into error_reports: {e}")
+
+
 def post_classify_other(o_str, c_str):
     if not o_str or not c_str:
         if not o_str and c_str.strip().lower() in {"the", "a", "an", "some", "any", "this", "that", "these", "those"}:
@@ -126,11 +216,6 @@ def post_classify_other(o_str, c_str):
 
     o_lower = o_str.lower().strip()
     c_lower = c_str.lower().strip()
-
-    if o_lower == c_lower:
-        return "R:ORTH"
-    if re.sub(r"\W", "", o_lower) == re.sub(r"\W", "", c_lower):
-        return "R:ORTH"
 
     aux_verbs = {
         "don't", "doesn't", "didn't", "won't", "wouldn't", "couldn't", "shouldn't",
@@ -142,7 +227,14 @@ def post_classify_other(o_str, c_str):
 
     sim = Levenshtein.normalized_similarity(o_lower, c_lower)
     if sim > 0.55:
+        if o_lower == c_lower:
+            return "R:ORTH"
         return "R:SPELL"
+
+    if o_lower == c_lower:
+        return "R:ORTH"
+    if re.sub(r"\W", "", o_lower) == re.sub(r"\W", "", c_lower):
+        return "R:ORTH"
 
     if o_lower[:3] == c_lower[:3] and len(o_str) > 3:
         return "R:MORPH"
@@ -306,7 +398,7 @@ def classify_edits(edits):
             })
         if e_type in ("UNK", "U:SPACE"):
             continue
-        example = f"{e.o_str.strip()} \u2192 {e.c_str.strip()}" if e.o_str and e.c_str else str(e.c_str)
+        example = f"{e.o_str.strip()} -> {e.c_str.strip()}" if e.o_str and e.c_str else str(e.c_str)
         if e_type not in error_groups:
             error_groups[e_type] = {"type": e_type, "example": example, "count": 0}
         error_groups[e_type]["count"] += 1
@@ -322,14 +414,15 @@ def process_file(file_path):
 
     student_id = data.get("student_id", "unknown")
     original_text = data.get("student_text", "").strip()
+    word_count = data.get("word_count", 0)
 
     if not original_text:
         print("  Empty student_text, skipping.")
         return None
 
+    student_info = lookup_student_info(student_id)
     print(f"  Student: {student_id}")
-    print(f"  Original length: {len(original_text)} chars")
-    print(f"  Model: {CORRECTION_MODEL}")
+    print(f"  Student info: {student_info}")
 
     nlp = spacy.load("en_core_web_sm")
     orig_doc = nlp(original_text)
@@ -355,21 +448,14 @@ def process_file(file_path):
     corrected_text = corrected_text.strip()
     print(f"  Corrected length: {len(corrected_text)} chars")
 
-    # GAP-2: Noop check — if text is identical, skip ERRANT
+    output = _build_output(student_id, original_text, corrected_text, word_count, student_info, [],
+                           {"errors": [], "uncategorised": []}, original_text, 0, [])
+
+    # Noop check — if text is identical, skip ERRANT
     if original_text.strip() == corrected_text.strip():
         print("  No corrections needed — text unchanged by model.")
-        metadata = build_metadata([], corrected_text, original_text)
-        output = {
-            "student_id": student_id,
-            "original_text": original_text,
-            "corrected_text": corrected_text,
-            "sentence_pairs": [],
-            "errant_analysis": {"errors": [], "uncategorised": []},
-            "corrected_with_markup": original_text,
-            "error_rate": 0,
-            "metadata": metadata,
-        }
-        return write_output(output, file_path)
+        output["metadata"] = build_metadata([], corrected_text, original_text)
+        return _finalize_output(output, file_path)
 
     both_succeeded = corrected_a is not None and corrected_b is not None
 
@@ -389,7 +475,7 @@ def process_file(file_path):
     # GAP-4: Pre-split multi-token edits
     use_edits = pre_split_edits(annotator, use_edits, orig_doc, cor_doc)
 
-    # GAP-1: Overcorrection detection + GAP-5: Metadata — built during classification
+    # GAP-1: Overcorrection detection + GAP-5: Metadata
     errors_list, uncategorised = classify_edits(use_edits)
     metadata = build_metadata(use_edits, corrected_text, original_text)
     metadata["uncertain_edit_count"] = uncertain_count if both_succeeded else len(use_edits) // 2
@@ -402,25 +488,46 @@ def process_file(file_path):
     for i in range(max_pairs):
         sentence_pairs.append({"original": orig_sentences[i], "corrected": cor_sentences[i]})
 
-    word_count = len(orig_doc)
     correction_count = sum(eg["count"] for eg in errors_list)
     error_rate = round((correction_count / word_count * 100)) if word_count > 0 else 0
 
-    output = {
+    output = _build_output(student_id, original_text, corrected_text, word_count, student_info,
+                           sentence_pairs, {"errors": errors_list, "uncategorised": uncategorised},
+                           marked_up, error_rate, use_edits)
+    output["metadata"] = metadata
+
+    return _finalize_output(output, file_path)
+
+
+def _build_output(student_id, original_text, corrected_text, word_count, student_info,
+                  sentence_pairs, errant_analysis, marked_up, error_rate, edits):
+    return {
         "student_id": student_id,
         "original_text": original_text,
         "corrected_text": corrected_text,
         "sentence_pairs": sentence_pairs,
-        "errant_analysis": {
-            "errors": errors_list,
-            "uncategorised": uncategorised,
-        },
+        "errant_analysis": errant_analysis,
         "corrected_with_markup": marked_up,
         "error_rate": error_rate,
-        "metadata": metadata,
+        "word_count": word_count,
+        "name": student_info.get("name", ""),
+        "class": student_info.get("class", ""),
     }
 
-    return write_output(output, file_path)
+
+def _finalize_output(output, file_path):
+    # Save without summary first
+    write_output(output, file_path)
+    # Generate summary (calls Mistral at temp 0.7)
+    print("  Generating summary...")
+    summary = generate_summary(output)
+    output["summary"] = summary or ""
+    print(f"  Summary: {summary[:80] if summary else '(empty)'}...")
+    # Re-write with summary
+    write_output(output, file_path)
+    # Insert into Supabase
+    insert_error_reports(output)
+    return output
 
 
 def write_output(output, file_path):
