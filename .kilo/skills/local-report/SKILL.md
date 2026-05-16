@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Generate a 4-page Typst booklet for each student after ERRANT analysis. Each booklet contains a personalized summary, error-rate line chart, original writing with error markup, corrected writing, and a detailed error breakdown table. Compiled to PDF automatically.
+Generate a combined Typst booklet from all ERRANT analysis outputs. All students are compiled into a single PDF, each occupying 4 pages (with blank pages as padding). Contains personalised greeting, AI-generated summary with human-readable error descriptions, error-rate line chart with CEFR target lines, original writing with underlined corrections, and error breakdown table.
 
 ## Files
 
@@ -41,22 +41,40 @@ Columns: `id`, `created_at`, `student_id`, `class`, `name`, `error_percent`, `su
 
 ## Output
 
-- Typst source: `outputs/{folder}/{dd-mm-yy}-{class}-{student_id}.typ`
-- PDF: `PDF/{folder}/{dd-mm-yy}-{class}-{student_id}.pdf`
-- Chart: `outputs/charts/{student_id}.png`
+- Typst source: `outputs/{folder}/{dd-mm-yy}-{class}-combined.typ`
+- PDF: `PDF/{folder}/{dd-mm-yy}-{class}-combined.pdf`
+- Charts: `outputs/charts/{student_id}.png` (one per student)
 
-## Booklet structure (4 pages per student)
+## Page structure (4 pages per student)
 
 | Page | Content |
 |------|---------|
-| 1 | Header strap (ACT logo, Mathayom Program, Cambridge logo), personalised greeting, AI-generated summary, error-rate line chart |
-| 2 | Original writing with corrections underlined |
-| 3 | Corrected writing (clean) |
-| 4 | Error breakdown table, total error rate, class info |
+| 1 | Header strap (ACT 1.0cm, Mathayom Program, Cambridge 1.75cm), subhead `{name} - {id} - {class}`, personalised greeting (*Dear {name},*), AI-generated summary with guidance ("It is better to write..."), target-rate boilerplate, error-rate line chart with CEFR target line + gray shading |
+| 2 | Your Writing with Corrections (underlined corrections, subhead "Corrections are underlined") |
+| 3-4 | Blank pages (4-page minimum per student) |
+
+Remaining pages blank-padded to reach 4-page minimum per student using Typst's `state`+`context` introspection (label anchor → `counter(page).at(label(anchor))` → `calc.rem-euclid`). No manual page counting.
 
 ## Font
 
-Base: Roboto 11pt. Header: Roboto 14pt bold. Falls back to system sans-serif if Roboto unavailable.
+Base: Roboto 14pt body (scales to ~10pt readable in A5 booklet when A4 folded). Title: 16pt. Header strap text: 14pt. Top margin: 5.0cm.
+
+## ERRANT error descriptions
+
+ERRANT codes are converted to human-readable descriptions using a mapping derived from `errant/en/classifier.py`. Broadened descriptions cover classification edge cases:
+
+| Code | Description |
+|------|-------------|
+| R:SPELL | "Spelling or capitalisation mistakes" (covers 'i'→'I' case changes that ERRANT misclassifies) |
+| R:ORTH | "Capitalisation, spacing, or punctuation errors" (covers punctuation edits ERRANT tags as orthography) |
+
+Summary uses the top 3 errors, ranked by frequency (descending `count`). Each error includes explicit guidance: *"It is better to write '[correction]'"*.
+
+## Chart
+
+- X-axis: dates formatted as "May 5", "Nov 6" (max 5 data points: 4 historical + current)
+- Y-axis: error rate %
+- CEFR target line: B1=12% (M3), B2=7% (M4+). Solid horizontal line with "Target (B1/B2)" label. Gray `axhspan` alpha=0.18 below the line
 
 ## Edge cases
 
@@ -65,7 +83,7 @@ Base: Roboto 11pt. Header: Roboto 14pt bold. Falls back to system sans-serif if 
 | No ERRANT outputs | Reports error, exits |
 | No Supabase credentials | Runs charts without historical data (current point only) |
 | No summary in JSON | Uses placeholder text |
-| Typst compilation fails | Reports error, continues to next student |
+| Typst compilation fails | Reports compilation error |
 | Chart generation fails | Reports error, continues without chart |
 
 ## Dependencies

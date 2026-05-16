@@ -4,6 +4,10 @@
 
 Pipelines student handwriting images through OCR transcription (Gemini via OpenRouter), ERRANT grammatical error analysis, Supabase storage, and report generation.
 
+## Shell: Windows PowerShell 5.1
+
+This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for shell-specific syntax requirements — use this as a reference when writing or troubleshooting commands.
+
 ## Slash commands
 
 - `/ingest-papers` — Transcribe handwritten essays from `inputs/` subfolders using `google/gemini-2.5-flash-lite-preview-09-2025`
@@ -22,6 +26,38 @@ Pipelines student handwriting images through OCR transcription (Gemini via OpenR
 - `.kilo/skills/supabase-classlist/SKILL.md` — Full workflow for Supabase classlist management via supabase-py
 - `.kilo/skills/rename-json-files/SKILL.md` — Full workflow for renaming ERRANT output files with classlist validation
 - `.kilo/skills/local-report/SKILL.md` — Full workflow for generating Typst report booklets with summary, charts, and PDF compilation
+- `.kilo/skills/tavily-websearch/SKILL.md` — Global skill: Web search via Tavily AI Search API (5 pre-written Python models). Use for research, fact-checking, or content gathering. Copy the script verbatim from the skill, change only the query/URL/parameters.
+
+## Environment variables
+
+| Variable | Purpose | Set? |
+|----------|---------|------|
+| `OPENROUTER_API_KEY` | LLM API for corrections & summaries | ✅ |
+| `CONTEXT7_API_KEY` | Context7 MCP for library doc retrieval (see Typst research below) | ✅ |
+| `TAVILY_API_KEY` | Tavily web search | ✅ |
+| `SUPABASE_URL` | Supabase project URL | as needed |
+| `SUPABASE_ESL_KEY` | Supabase service role key | as needed |
+
+## Models (current)
+
+| Role | Model | Cost/M in | Cost/M out |
+|------|-------|-----------|------------|
+| Correction | `google/gemma-4-31b-it` | $0.12 | $0.37 |
+| Summary | `google/gemma-4-31b-it` | $0.12 | $0.37 |
+| Ingestion | `google/gemini-2.5-flash-lite-preview-09-2025` | | |
+
+Correction runs at two temperatures (0.1 and 0.3) with double-check intersection. Summary runs at 0.8. Both use OpenRouter. Full pipeline cost: ~$0.00042 per student.
+
+## Typst research methodology
+
+Context7 (`CONTEXT7_API_KEY`) is an MCP server for library documentation — **Typst is NOT indexed** (returns 404). Use this tiered approach instead:
+
+| Need | Tool | Example |
+|------|------|---------|
+| Official API reference | **Web fetch** from `typst.app/docs` | `webfetch("https://typst.app/docs/reference/layout/page/")` |
+| Community patterns & solutions | **Tavily web search** | `tavily search "Typst pad to multiple of 4 pages pagebreak"` |
+| Source-level docs | **`gh api`** on `typst/typst` repo | `gh api repos/typst/typst/contents/docs/...` |
+| Changelog / version diffs | **`gh api`** changelog | `docs/content/changelog/` |
 
 ## Python project
 

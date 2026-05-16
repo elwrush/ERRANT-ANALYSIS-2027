@@ -124,7 +124,7 @@ class TestMetadata:
     def test_basic_metadata_shape(self):
         from errant_analysis import build_metadata
         meta = build_metadata([], "corrected", "original")
-        assert meta["model"] == "mistralai/mistral-small-3.2-24b-instruct"
+        assert meta["model"] == "google/gemma-4-31b-it"
         assert meta["temperature"] == 0.1
         assert meta["identity_check"] is False
         assert meta["total_edit_count"] == 0

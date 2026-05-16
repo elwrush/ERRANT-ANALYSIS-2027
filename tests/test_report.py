@@ -7,14 +7,14 @@ os.chdir(Path(__file__).resolve().parent.parent)
 
 
 class TestTypContent:
-    def test_build_typ_produces_valid_string(self):
-        from generate_report import build_typ_content
+    def test_build_student_block_produces_valid_string(self):
+        from generate_report import build_student_block
         sample = {
             "student_id": "99999",
             "name": "Test",
             "class": "M3-1A",
             "error_rate": 15,
-            "summary": "Hi Test, good writing!",
+            "summary": "Dear Test, good writing!",
             "original_text": "Hello world.",
             "corrected_text": "Hello world.",
             "corrected_with_markup": "Hello world.",
@@ -22,12 +22,28 @@ class TestTypContent:
                 {"type": "R:SPELL", "count": 2, "example": "hello -> hello"},
             ]},
         }
-        result = build_typ_content(sample)
+        result = build_student_block(sample, 0)
         assert isinstance(result, str)
         assert len(result) > 100
+        assert "Test - 99999 - M3-1A" in result
         assert "Test" in result
-        assert "15%" in result
         assert "Hello world" in result
+        assert "Your Writing with Corrections" in result
+        assert "We scanned your writing for errors and underlined the corrections" in result
+        assert "target error rate" in result.lower()
+        assert "Writing Accuracy Feedback Report" in result
+        assert "*Dear Test,*" in result
+        assert 'pad-anchor-0' in result
+        assert 'pagebreak()' in result
+
+    def test_header_is_valid(self):
+        from generate_report import build_typ_header
+        result = build_typ_header()
+        assert isinstance(result, str)
+        assert "Roboto" in result
+        assert "14pt" in result
+        assert "Mathayom Program" in result
+        assert "place(top + left, dy: 0cm)[" in result
 
     def test_esc_handles_special_chars(self):
         from generate_report import esc

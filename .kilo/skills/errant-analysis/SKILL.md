@@ -44,10 +44,10 @@ Saved to `local-working/{folder}-{student_id}.json`:
   },
   "corrected_with_markup": "...",
   "error_rate": 30,
-  "metadata": {
-    "model": "mistralai/mistral-small-3.2-24b-instruct",
+    "metadata": {
+    "model": "google/gemma-4-31b-it",
+    "summary_model": "google/gemma-4-31b-it",
     "temperature": 0.1,
-    "identity_check": false,
     "overcorrection_count": 0,
     "overcorrection_warnings": [],
     "total_edit_count": 0,
@@ -66,18 +66,26 @@ Saved to `local-working/{folder}-{student_id}.json`:
 | Config | Value |
 |--------|-------|
 | Provider | OpenRouter |
-| Correction model | `mistralai/mistral-small-3.2-24b-instruct` |
-| Input price | $0.075 / 1M tokens |
-| Output price | $0.20 / 1M tokens |
-| Temperature | 0.1 (low for deterministic corrections) |
+| Correction model | `google/gemma-4-31b-it` |
+| Summary model | `google/gemma-4-31b-it` |
+| Input price | $0.12 / 1M tokens |
+| Output price | $0.37 / 1M tokens |
+| Correction temperature | 0.1 (pass 1), 0.3 (pass 2) |
+| Summary temperature | 0.8 |
 | Context guard | 32K tokens |
 | Rate limiting | exponential backoff (2^n + jitter) on errors |
 | Jitter | 0.5–1.5s between API calls |
 | API key | `OPENROUTER_API_KEY` in `.env` or environment |
+| Parallel workers | 5 (`ThreadPoolExecutor`) |
 
 ## Cost estimate
 
-A 500-word essay (~700 tokens) costs roughly $0.0002 — **320 essays for ~$0.02**, 10,000 essays for under $1.
+A 150-word essay (~200 tokens) costs roughly:
+- Correction (2 passes): $0.00026 per student
+- Summary: $0.00016 per student
+- **Total: ~$0.00042 per student** (~$0.04 for 100 students)
+
+At scale using Gemma 4 31B-it: $0.06 for 150 students (full pipeline: correction + summary).
 
 ## ERRANT uncategorised handling
 

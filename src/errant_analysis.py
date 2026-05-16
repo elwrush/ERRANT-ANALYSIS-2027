@@ -17,7 +17,8 @@ load_dotenv()
 
 API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-CORRECTION_MODEL = "mistralai/mistral-small-3.2-24b-instruct"
+CORRECTION_MODEL = "google/gemma-4-31b-it"
+SUMMARY_MODEL = "google/gemma-4-31b-it"
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 OUTPUTS_DIR = Path("outputs")
@@ -31,7 +32,7 @@ REQUEST_TIMEOUT = 45
 JITTER_MIN = 0.5
 JITTER_MAX = 1.5
 MULTI_TOKEN_THRESHOLD = 3
-SUMMARY_TEMPERATURE = 0.7
+SUMMARY_TEMPERATURE = 0.8
 MAX_WORKERS = 5
 
 STUDENTS_PATH = Path("docs/students.txt")
@@ -90,12 +91,12 @@ def call_model(text, temperature=TEMPERATURE):
     return _call_api(CORRECTION_PROMPT.format(text=text), temperature)
 
 
-def call_model_custom(prompt_content, temperature=TEMPERATURE):
-    return _call_api(prompt_content, temperature)
+def call_model_custom(prompt_content, temperature=TEMPERATURE, model=None):
+    return _call_api(prompt_content, temperature, model=model)
 
 
 @retry(max_retries=MAX_RETRIES)
-def _call_api(content, temperature):
+def _call_api(content, temperature, model=None):
     if not API_KEY:
         print("  Error: OPENROUTER_API_KEY not set")
         return None
@@ -105,7 +106,7 @@ def _call_api(content, temperature):
         "Content-Type": "application/json",
     }
     payload = {
-        "model": CORRECTION_MODEL,
+        "model": model if model else CORRECTION_MODEL,
         "temperature": temperature,
         "messages": [
             {"role": "system", "content": content},
@@ -124,20 +125,92 @@ def _call_api(content, temperature):
         raise RetryableError(str(e))
 
 
-SUMMARY_PROMPT = """Write a feedback paragraph in this exact format for {name}, a Thai ESL student (error rate: {error_rate}%):
+ERRANT_CODE_NAMES = {
+    # Noun errors
+    "R:NOUN": "Problems with nouns",
+    "R:NOUN:NUM": "Problems with singular and plural nouns",
+    "R:NOUN:POSS": "Problems with possessive nouns",
+    "R:NOUN:INFL": "Problems with noun inflection",
+    # Verb errors
+    "R:VERB": "Problems with verbs",
+    "R:VERB:TENSE": "Problems with verb tense",
+    "R:VERB:SVA": "Problems with subject-verb agreement",
+    "R:VERB:FORM": "Problems with verb form (gerunds and infinitives)",
+    "R:VERB:INFL": "Problems with verb inflection",
+    # Adjective errors
+    "R:ADJ": "Problems with adjectives",
+    "R:ADJ:FORM": "Problems with adjective form (comparatives and superlatives)",
+    # Other POS errors
+    "R:ADV": "Problems with adverbs",
+    "R:PREP": "Problems with prepositions",
+    "R:PRON": "Problems with pronouns",
+    "R:DET": "Problems with determiners (articles: a, an, the)",
+    "R:CONJ": "Problems with conjunctions",
+    "R:PART": "Problems with particles",
+    "R:PUNCT": "Problems with punctuation",
+    # Spelling and orthography
+    "R:SPELL": "Spelling or capitalisation mistakes",
+    "R:ORTH": "Capitalisation and spacing errors",
+    "R:MORPH": "Problems with word formation (prefixes and suffixes)",
+    # Structure
+    "R:WO": "Problems with word order",
+    "R:CONTR": "Problems with contractions",
+    # Missing / Unnecessary error codes
+    "M:NOUN": "Missing noun",
+    "M:NOUN:NUM": "Missing plural noun ending",
+    "M:VERB": "Missing verb",
+    "M:VERB:TENSE": "Missing auxiliary verb",
+    "M:VERB:FORM": "Missing verb form",
+    "M:PREP": "Missing preposition",
+    "M:PRON": "Missing pronoun",
+    "M:DET": "Missing determiner (a, an, the)",
+    "M:CONJ": "Missing conjunction",
+    "M:PART": "Missing particle",
+    "M:PUNCT": "Missing punctuation",
+    "U:NOUN": "Unnecessary noun",
+    "U:VERB": "Unnecessary verb",
+    "U:PREP": "Unnecessary preposition",
+    "U:PRON": "Unnecessary pronoun",
+    "U:DET": "Unnecessary determiner",
+    "U:CONJ": "Unnecessary conjunction",
+    "U:PART": "Unnecessary particle",
+    "U:PUNCT": "Unnecessary punctuation",
+    # Generic fallback
+    "OTHER": "Other errors",
+    "UNK": "Unidentified error type",
+}
 
-Hi {name},
+
+def human_error_type(err_type):
+    """Convert an ERRANT error code to a human-readable description."""
+    if err_type in ERRANT_CODE_NAMES:
+        return ERRANT_CODE_NAMES[err_type]
+    prefix = err_type[:2] if err_type[1] == ":" else ""
+    body = err_type[2:] if prefix else err_type
+    if body in ERRANT_CODE_NAMES:
+        desc = ERRANT_CODE_NAMES[body]
+        if prefix == "M:":
+            return f"Missing: {desc.lower()}"
+        if prefix == "U:":
+            return f"Unnecessary: {desc.lower()}"
+        return desc
+    return err_type
+
+
+SUMMARY_PROMPT = """Write a feedback paragraph in this exact format for {name}, a Thai ESL student (error rate: {error_rate}%):
 
 [One sentence of specific, genuine praise about their writing — mention something concrete they did well, like a word they used effectively or an idea they expressed clearly]
 
 I could mostly understand what you were saying, but your communication and grade will improve a lot if you pay special attention to the following mistakes:
 
-1. [Error type] — [simple explanation of what they did wrong]. For example, you wrote "[brief quote from their writing with the error]".
-2. [Error type] — [simple explanation]. For example, you wrote "[brief quote with error]".
-3. [Error type] — [simple explanation]. For example, you wrote "[brief quote with error]".
+1. *[Human-readable error description (ERROR_CODE):* [simple explanation of what they did wrong]. For example, you wrote "[brief quote with error]". It is better to write "[corrected version]".
+2. *[Human-readable error description (ERROR_CODE):* [simple explanation]. For example, you wrote "[brief quote with error]". It is better to write "[corrected version]".
+3. *[Human-readable error description (ERROR_CODE):* [simple explanation]. For example, you wrote "[brief quote with error]". It is better to write "[corrected version]".
 
 Use ONLY errors from this list:
 {error_list}
+
+Format error types as: Human-readable description (CODE) — e.g. "Problems with singular and plural nouns (R:NOUN:NUM)"
 
 The student wrote this:
 {original_text}
@@ -157,27 +230,42 @@ def lookup_student_info(student_id: str) -> dict:
     return {}
 
 
+def _sanitize_unicode(text):
+    """Replace problematic Unicode characters that break Typst rendering."""
+    replacements = {
+        "\u2018": "'", "\u2019": "'",
+        "\u201c": '"', "\u201d": '"',
+        "\u2013": "-", "\u2014": "--",
+        "\u2026": "...",
+        "\u00a0": " ",
+        "\ufffd": "",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+
 def generate_summary(output: dict) -> str | None:
     errors = output.get("errant_analysis", {}).get("errors", [])
     if not errors:
         return "Your writing was very accurate — no corrections were needed. Keep up the great work!"
     top5 = errors[:5]
     error_list = "\n".join(
-        f"- {e['type']}: {e['count']} time(s) (e.g. {e['example']})"
+        f"- {human_error_type(e['type'])} ({e['type']}): {e['count']} time(s) (e.g. {e['example']})"
         for e in top5
     )
     name = output.get("name", "student")
-    # Use first 200 chars of original text for quoting
-    sample = output.get("original_text", "")[:200]
+    # Use full student text for accurate quoting
+    sample = output.get("original_text", "")[:2000]
     prompt = SUMMARY_PROMPT.format(
         name=name,
         error_rate=output["error_rate"],
         error_list=error_list,
         original_text=sample,
     )
-    result = call_model_custom(prompt, SUMMARY_TEMPERATURE)
+    result = call_model_custom(prompt, SUMMARY_TEMPERATURE, model=SUMMARY_MODEL)
     if result:
-        result = result.encode("utf-8", errors="replace").decode("utf-8")
+        result = _sanitize_unicode(result)
     return result if result else f"Your writing had {output['error_rate']}% errors. Keep practicing!"
 
 
@@ -267,6 +355,12 @@ def generate_markup(orig_doc, edits):
                 result_parts.append(f"<u>{edit.c_str}</u>")
             i = edit.o_end if edit.o_toks else (edit.o_end if edit.o_end > edit.o_start else i)
             edit_idx += 1
+            # Preserve whitespace between consecutive edits
+            if edit_idx < len(edits) and i < len(tokens) and i == edits[edit_idx].o_start:
+                if tokens[i].text_with_ws and not tokens[i].text_with_ws[0].isspace():
+                    pass  # next edit starts on a non-whitespace token, no extra space needed
+                elif i < len(tokens) and not result_parts[-1].endswith(" "):
+                    result_parts.append(" ")
         else:
             result_parts.append(tokens[i].text_with_ws)
             i += 1
@@ -275,7 +369,10 @@ def generate_markup(orig_doc, edits):
 
 
 def fix_markup_spacing(marked_up):
-    return re.sub(r"</u>(?!\s|$|<)", "</u> ", marked_up)
+    # Add space between adjacent underline tags (consecutive edits lose inter-word whitespace)
+    marked_up = re.sub(r"</u><u>", "</u> <u>", marked_up)
+    marked_up = re.sub(r"</u>(?!\s|$|<)", "</u> ", marked_up)
+    return marked_up
 
 
 def intersect_edits(edits_a, edits_b):
@@ -611,6 +708,15 @@ if __name__ == "__main__":
             print("Error: OPENROUTER_API_KEY not set. Add it to .env or export it.")
             sys.exit(1)
         files = find_output_files()
+        # Optional folder filter after --batch, e.g. --batch test2
+        idx = sys.argv.index("--batch")
+        folder_filter = sys.argv[idx + 1] if idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith("--") else None
+        if folder_filter:
+            files = [f for f in files if f.parent.name == folder_filter]
+            if not files:
+                print(f"No files found in folder '{folder_filter}'")
+                sys.exit(1)
+            print(f"Filtered to {len(files)} file(s) in '{folder_filter}'")
         if not files:
             print(f"No JSON files found in {OUTPUTS_DIR}/")
             print("Run ingest-images first to produce output files.")
