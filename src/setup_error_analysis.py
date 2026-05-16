@@ -8,6 +8,12 @@ load_dotenv()
 
 SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL")
 
+NEW_COLUMNS = [
+    "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS submission_date TIMESTAMPTZ",
+    "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS topic TEXT",
+    "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS record_id INTEGER",
+]
+
 COLUMNS_SQL = [
     "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS r_noun INTEGER DEFAULT 0",
     "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS r_noun_num INTEGER DEFAULT 0",
@@ -61,19 +67,23 @@ def execute_via_psycopg2():
     conn = psycopg2.connect(SUPABASE_DB_URL, sslmode="require")
     conn.autocommit = True
     cur = conn.cursor()
-    for stmt in COLUMNS_SQL:
+    for stmt in NEW_COLUMNS + COLUMNS_SQL:
         cur.execute(stmt)
     cur.close()
     conn.close()
-    print(f"Added {len(COLUMNS_SQL)} columns to error_reports")
+    print(f"Added {len(NEW_COLUMNS) + len(COLUMNS_SQL)} columns to error_reports")
+
+
+def print_sql():
+    for stmt in NEW_COLUMNS + COLUMNS_SQL:
+        print(stmt + ";")
 
 
 def main():
     if not SUPABASE_DB_URL:
         print("Set SUPABASE_DB_URL in .env (get it from Supabase Dashboard → Project Settings → Database → Connection string, with password)")
         print("\nAlternatively, copy & paste the SQL below into the Supabase SQL editor:\n")
-        for stmt in COLUMNS_SQL:
-            print(stmt + ";")
+        print_sql()
         sys.exit(1)
 
     try:

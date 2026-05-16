@@ -7,3 +7,5 @@ rapidfuzz>=3.0
 supabase>=2.0
 pytest-mock>=3.0
 matplotlib>=3.9
+tqdm>=4.0
+openai>=1.0

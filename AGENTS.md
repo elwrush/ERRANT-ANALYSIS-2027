@@ -36,7 +36,8 @@ This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for
 
 | Variable | Purpose | Set? |
 |----------|---------|------|
-| `OPENROUTER_API_KEY` | LLM API for corrections & summaries | ✅ |
+| `OPENAI_API_KEY` | LLM API for corrections & summaries | ✅ |
+| `OPENROUTER_API_KEY` | Fallback if OpenAI direct unavailable | ✅ |
 | `CONTEXT7_API_KEY` | Context7 MCP for library doc retrieval (see Typst research below) | ✅ |
 | `TAVILY_API_KEY` | Tavily web search | ✅ |
 | `SUPABASE_URL` | Supabase project URL | as needed |
@@ -46,11 +47,11 @@ This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for
 
 | Role | Model | Cost/M in | Cost/M out |
 |------|-------|-----------|------------|
-| Correction | `google/gemma-4-31b-it` | $0.12 | $0.37 |
-| Summary | `google/gemma-4-31b-it` | $0.12 | $0.37 |
+| Correction | `gpt-4o-mini` | $0.15 | $0.60 |
+| Summary | `gpt-4o-mini` | $0.15 | $0.60 |
 | Ingestion | `google/gemini-2.5-flash-lite-preview-09-2025` | | |
 
-Correction runs at two temperatures (0.1 and 0.3) with double-check intersection. Summary runs at 0.8. Both use OpenRouter. Full pipeline cost: ~$0.00042 per student.
+Correction runs at 4 temperatures (0.1, 0.3, 0.5, 0.7) with edit-level majority voting (≥3 of 4 passes). Summary runs at 0.8. Both use the OpenAI direct API. Full pipeline cost: ~$0.00042 per student.
 
 ## Typst research methodology
 
@@ -94,9 +95,10 @@ pytest tests/ -v
 
 - Images: `inputs/{folder}/` — any JPEG or PNG filename accepted
 - Ingestion output: `outputs/{folder}/{student_id}.json` with keys `student_id` and `student_text`
-- ERRANT output: `local-working/{folder}-{student_id}.json` with full error analysis, sentence pairs, Typst-native `corrected_typst` field, and metadata
+- Research prep output: `outputs/research/{record_id}.json` with per-record metadata (one file per student writing submission)
+- ERRANT output: `local-working/{folder}-{record_id}.json` with full error analysis, sentence pairs, Typst-native `corrected_typst` field, metadata, and record metadata
 - Multi-page essays combined into a single JSON, pages joined with `\n`
-- API key: `OPENROUTER_API_KEY` in `.env` or environment
+- API key: `OPENAI_API_KEY` in `.env` or environment; `OPENROUTER_API_KEY` as fallback
 
 ## Transcription rules (enforced by prompt)
 

@@ -124,7 +124,7 @@ class TestMetadata:
     def test_basic_metadata_shape(self):
         from errant_analysis import build_metadata
         meta = build_metadata([], "corrected", "original")
-        assert meta["model"] == "google/gemma-4-31b-it"
+        assert meta["model"] == "gpt-4o-mini"
         assert meta["temperature"] == 0.1
         assert meta["identity_check"] is False
         assert meta["total_edit_count"] == 0
@@ -161,14 +161,14 @@ class TestIntersectEdits:
         from errant_analysis import intersect_edits, _make_edit
         e1 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
         e2 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
-        result = intersect_edits([e1], [e2])
+        result = intersect_edits([[e1], [e2]], threshold=2)
         assert len(result) == 1
 
     def test_no_match(self):
         from errant_analysis import intersect_edits, _make_edit
         e1 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
         e2 = _make_edit(0, 2, [], "a c", 0, 1, [], "d", "R:OTHER")
-        result = intersect_edits([e1], [e2])
+        result = intersect_edits([[e1], [e2]], threshold=2)
         assert len(result) == 0
 
     def test_partial_match(self):
@@ -177,7 +177,7 @@ class TestIntersectEdits:
         e2 = _make_edit(2, 3, [], "c", 2, 3, [], "d", "R:SPELL")
         e3 = _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:VERB:TENSE")
         e4 = _make_edit(5, 6, [], "e", 5, 6, [], "f", "M:DET")
-        result = intersect_edits([e1, e2], [e3, e4])
+        result = intersect_edits([[e1, e2], [e3, e4]], threshold=2)
         assert len(result) == 1
         assert result[0].type == "R:VERB:TENSE"
 

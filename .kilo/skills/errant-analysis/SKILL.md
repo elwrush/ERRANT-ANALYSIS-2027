@@ -33,11 +33,14 @@ Before ERRANT analysis, run `python src/add_word_count.py` to count the actual w
 
 ## Output
 
-Saved to `local-working/{folder}-{student_id}.json`:
+Saved to `local-working/{folder}-{record_id}.json`:
 
 ```json
 {
   "student_id": "12345",
+  "record_id": 67890,
+  "submission_date": "2024-06-15T09:00:00+00:00",
+  "topic": "Social Issue Opinion",
   "original_text": "...",
   "corrected_text": "...",
   "sentence_pairs": [],
@@ -50,9 +53,9 @@ Saved to `local-working/{folder}-{student_id}.json`:
   },
   "corrected_typst": "...",
   "error_rate": 30,
-    "metadata": {
-    "model": "google/gemma-4-31b-it",
-    "summary_model": "google/gemma-4-31b-it",
+  "metadata": {
+    "model": "gpt-4o-mini",
+    "summary_model": "gpt-4o-mini",
     "temperature": 0.1,
     "overcorrection_count": 0,
     "overcorrection_warnings": [],
@@ -71,8 +74,9 @@ Saved to `local-working/{folder}-{student_id}.json`:
 
 After ERRANT analysis completes, the pipeline inserts a row into the `error_reports` Supabase table with:
 
-- `student_id`, `class`, `name`, `error_percent`, `summary` — base fields
-- **45 error code columns** (`r_spell`, `r_det`, `r_verb_tense`, `m_noun`, `u_punct`, etc.) — one per ERRANT code, populated with the count for that student (0 if none)
+- `student_id`, `class`, `name`, `error_percent`, `summary`, `word_count` — base fields
+- `record_id`, `submission_date`, `topic` — per-record metadata for identifying individual writing submissions
+- **45 error code columns** (`r_spell`, `r_det`, `r_verb_tense`, `m_noun`, `u_punct`, etc.) — one per ERRANT code, populated with the count for that record (0 if none)
 
 The code-to-column mapping is defined in `ERRANT_CODE_TO_COLUMN` (line ~184 of `src/errant_analysis.py`). Colon-delimited codes like `R:NOUN:NUM` are sanitized to `r_noun_num`. All 45 codes are mapped:
 
@@ -89,17 +93,17 @@ The code-to-column mapping is defined in `ERRANT_CODE_TO_COLUMN` (line ~184 of `
 
 | Config | Value |
 |--------|-------|
-| Provider | OpenRouter |
-| Correction model | `google/gemma-4-31b-it` |
-| Summary model | `google/gemma-4-31b-it` |
-| Input price | $0.12 / 1M tokens |
-| Output price | $0.37 / 1M tokens |
-| Correction temperature | 0.1 (pass 1), 0.3 (pass 2) |
+| Provider | OpenAI direct API |
+| Correction model | `gpt-4o-mini` |
+| Summary model | `gpt-4o-mini` |
+| Input price | $0.15 / 1M tokens |
+| Output price | $0.60 / 1M tokens |
+| Correction temperatures | 0.1, 0.3, 0.5, 0.7 (4 passes, majority voting ≥3) |
 | Summary temperature | 0.8 |
 | Context guard | 32K tokens |
 | Rate limiting | exponential backoff (2^n + jitter) on errors |
 | Jitter | 0.5–1.5s between API calls |
-| API key | `OPENROUTER_API_KEY` in `.env` or environment |
+| API key | `OPENAI_API_KEY` in `.env` or environment |
 | Supabase URL | `SUPABASE_URL` in `.env` |
 | Supabase key | `SUPABASE_ESL_KEY` in `.env` |
 | DB connection | `SUPABASE_DB_URL` in `.env` (for `setup_error_analysis.py` only) |
@@ -108,11 +112,11 @@ The code-to-column mapping is defined in `ERRANT_CODE_TO_COLUMN` (line ~184 of `
 ## Cost estimate
 
 A 150-word essay (~200 tokens) costs roughly:
-- Correction (2 passes): $0.00026 per student
+- Correction (4 passes): $0.00052 per student
 - Summary: $0.00016 per student
-- **Total: ~$0.00042 per student** (~$0.04 for 100 students)
+- **Total: ~$0.00068 per student** (~$0.07 for 100 students)
 
-At scale using Gemma 4 31B-it: $0.06 for 150 students (full pipeline: correction + summary).
+At scale using gpt-4o-mini: $0.10 for 150 students (full pipeline: correction + summary).
 
 ## ERRANT uncategorised handling
 
@@ -124,16 +128,18 @@ The script includes a `post_classify_other` function that reclassifies ERRANT's 
 - Determiner/article changes
 - Preposition changes
 
-## Double-check pass
+## Multi-pass voting (edit-level majority voting)
 
-The pipeline runs correction at **two temperatures** and intersects the edits:
+The pipeline runs correction at **4 temperatures** and applies edit-level majority voting:
 
 | Pass | Temperature | Purpose |
 |------|-------------|---------|
 | Pass 1 | 0.1 | Conservative, high-precision corrections |
 | Pass 2 | 0.3 | Slightly more permissive, catches subtle errors |
+| Pass 3 | 0.5 | Moderate diversity, catches alternative patterns |
+| Pass 4 | 0.7 | Maximum diversity, broad coverage |
 
-Only edits present in **both** passes are used in the final output. Edits found only in one pass are counted in `metadata.uncertain_edit_count`. This approximates the edit-level majority voting technique from Goto et al. (2025), filtering out model hallucinations and overcorrections.
+Only edits present in **at least 3 of 4 passes** are used in the final output. This implements the edit-level majority voting technique from Goto et al. (2025), which the paper shows improves F0.5 by up to 14 points on low-error-density datasets. The threshold of 3 out of 4 provides high precision: the paper demonstrates that edit frequency positively correlates with precision (Figure 3 in their paper). Edits found in fewer than 3 passes are counted in `metadata.uncertain_edit_count`.
 
 ## Overcorrection detection
 

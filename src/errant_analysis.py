@@ -6,27 +6,33 @@ import json
 import csv
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 from dotenv import load_dotenv
+from openai import OpenAI
 from _retry import RetryableError, retry
 from generate_report import esc
-import requests
 import spacy
 import errant
 from rapidfuzz.distance import Levenshtein
 
-load_dotenv()
+load_dotenv(override=True)
 
-API_KEY = os.environ.get("OPENROUTER_API_KEY")
+API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
 
-CORRECTION_MODEL = "google/gemma-4-31b-it"
-SUMMARY_MODEL = "google/gemma-4-31b-it"
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
+CORRECTION_MODEL = "gpt-4o-mini"
+SUMMARY_MODEL = "gpt-4o-mini"
+
+# Force direct OpenAI — the system may have OPENAI_BASE_URL set to OpenRouter
+def _openai_client():
+    return OpenAI(api_key=API_KEY, base_url="https://api.openai.com/v1")
 
 OUTPUTS_DIR = Path("outputs")
 LOCAL_WORKING_DIR = Path("local-working")
 
 TEMPERATURE = 0.1
 DOUBLE_CHECK_TEMP = 0.3
+CORRECTION_TEMPS = [0.1, 0.3, 0.5, 0.7]
+VOTE_THRESHOLD = 3
 MODEL_CONTEXT_LIMIT = 32000
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 45
@@ -39,21 +45,9 @@ MAX_WORKERS = 5
 STUDENTS_PATH = Path("docs/students.txt")
 
 
-CORRECTION_PROMPT = """You are a grammar correction tool. Correct the following student essay.
+CORRECTION_PROMPT = """You are a grammatical error correction tool. Your task is to correct the grammaticality and spelling in the following text written by a student learning English. Make the smallest possible change in order to make the text grammatically correct. Change as few words as possible. Do not rephrase parts that are already grammatical. Do not change the meaning by adding or removing information. If the text is already grammatically correct, output the original text without changing anything. Return only the corrected plain text and nothing else.
 
-Rules:
-- Correct ONLY grammatical errors (verb form, subject-verb agreement, articles, prepositions, spelling).
-- Make the MINIMAL change needed — change only the error, leave everything else untouched.
-- Do NOT rephrase, improve style, change vocabulary, or alter meaning.
-- Do NOT add markdown, bold, asterisks, quotes, or any formatting.
-- Do NOT add any commentary, explanation, or notes.
-- Preserve the original paragraph breaks and sentence structure.
-- Return ONLY the corrected plain text, nothing else.
-
-Original text:
-{text}
-
-Corrected text:"""
+{text}"""
 
 
 def find_output_files():
@@ -99,28 +93,24 @@ def call_model_custom(prompt_content, temperature=TEMPERATURE, model=None):
 @retry(max_retries=MAX_RETRIES)
 def _call_api(content, temperature, model=None):
     if not API_KEY:
-        print("  Error: OPENROUTER_API_KEY not set")
+        print("  Error: no API key found (set OPENAI_API_KEY in .env)")
         return None
 
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model if model else CORRECTION_MODEL,
-        "temperature": temperature,
-        "messages": [
-            {"role": "system", "content": content},
-        ],
-    }
+    model_name = model if model else CORRECTION_MODEL
+    client = _openai_client()
 
     try:
-        r = requests.post(API_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-        r.raise_for_status()
-        data = r.json()
-        content = data["choices"][0]["message"]["content"].strip()
-        if content:
-            return content
+        r = client.chat.completions.create(
+            model=model_name,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": content},
+            ],
+            timeout=REQUEST_TIMEOUT,
+        )
+        result = r.choices[0].message.content
+        if result:
+            return result.strip()
         raise ValueError("Empty response")
     except Exception as e:
         raise RetryableError(str(e))
@@ -306,6 +296,10 @@ def insert_error_reports(output: dict):
             "name": output.get("name", ""),
             "error_percent": output["error_rate"],
             "summary": output.get("summary", ""),
+            "word_count": output.get("word_count", 0),
+            "record_id": output.get("record_id"),
+            "submission_date": output.get("submission_date"),
+            "topic": output.get("topic", ""),
         }
         for col in ERROR_CODE_COLUMNS:
             row[col] = 0
@@ -406,18 +400,23 @@ def build_corrected_typst(orig_doc, edits):
     return result
 
 
-def intersect_edits(edits_a, edits_b):
-    matched_b = set()
-    confirmed = []
-    for ea in edits_a:
-        for i, eb in enumerate(edits_b):
-            if i in matched_b:
+def intersect_edits(edit_lists, threshold=3):
+    """Edit-level majority voting: return edits appearing in >= threshold of the edit lists."""
+    from collections import defaultdict
+    counts = defaultdict(int)
+    edits_by_key = {}
+
+    for edits in edit_lists:
+        seen_in_this_list = set()
+        for e in edits:
+            key = (e.o_start, e.o_end, e.type)
+            if key in seen_in_this_list:
                 continue
-            if ea.o_start == eb.o_start and ea.o_end == eb.o_end and ea.type == eb.type:
-                confirmed.append(ea)
-                matched_b.add(i)
-                break
-    return confirmed
+            seen_in_this_list.add(key)
+            edits_by_key[key] = e
+            counts[key] += 1
+
+    return [edits_by_key[k] for k, c in counts.items() if c >= threshold]
 
 
 def _make_edit(o_start, o_end, o_toks, o_str, c_start, c_end, c_toks, c_str, etype):
@@ -490,6 +489,8 @@ def build_metadata(edits, corrected_text, original_text):
     return {
         "model": CORRECTION_MODEL,
         "temperature": TEMPERATURE,
+        "correction_temps": CORRECTION_TEMPS,
+        "vote_threshold": VOTE_THRESHOLD,
         "identity_check": identity,
         "overcorrection_count": oc_count,
         "overcorrection_warnings": oc_warnings,
@@ -544,8 +545,17 @@ def process_file(file_path, nlp=None, annotator=None):
         return None
 
     student_info = lookup_student_info(student_id)
+    if data.get("name"):
+        student_info["name"] = data["name"]
+    if data.get("class"):
+        student_info["class"] = data["class"]
+    record_id = data.get("record_id")
+    submission_date = data.get("submission_date", "")
+    topic = data.get("topic", "")
     print(f"  Student: {student_id}")
     print(f"  Student info: {student_info}")
+    if topic:
+        print(f"  Topic: {topic}")
 
     if nlp is None:
         nlp = spacy.load("en_core_web_sm")
@@ -555,18 +565,21 @@ def process_file(file_path, nlp=None, annotator=None):
     if annotator is None:
         annotator = errant.load("en")
 
-    # Double-check: run correction at two different temperatures in parallel
-    print("  Correcting text (pass 1, temp=0.1) and (pass 2, temp=0.3)...")
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_a = executor.submit(call_model, original_text, TEMPERATURE)
-        future_b = executor.submit(call_model, original_text, DOUBLE_CHECK_TEMP)
-        corrected_a = future_a.result()
-        corrected_b = future_b.result()
+    # Multi-pass correction with edit-level majority voting
+    temps_str = ", ".join(f"temp={t}" for t in CORRECTION_TEMPS)
+    print(f"  Correcting text ({len(CORRECTION_TEMPS)} passes: {temps_str})...")
+    results = []
+    for temp in CORRECTION_TEMPS:
+        results.append(call_model(original_text, temp))
 
-    # Use the conservative (lower temp) version as primary
-    corrected_text = corrected_a or corrected_b or original_text
-    if not corrected_a and not corrected_b:
-        print("  Both correction passes failed, using original as-is.")
+    # Use the first successful result as the primary corrected text
+    corrected_text = None
+    for r in results:
+        if r:
+            corrected_text = r
+            break
+    if not corrected_text:
+        print("  All correction passes failed, using original as-is.")
         corrected_text = original_text
 
     corrected_text = corrected_text.strip()
@@ -574,6 +587,9 @@ def process_file(file_path, nlp=None, annotator=None):
 
     output = _build_output(student_id, original_text, corrected_text, word_count, student_info, [],
                            {"errors": [], "uncategorised": []}, original_text, 0, [])
+    output["record_id"] = record_id
+    output["submission_date"] = submission_date
+    output["topic"] = topic
 
     # Noop check — if text is identical, skip ERRANT
     if original_text.strip() == corrected_text.strip():
@@ -581,18 +597,20 @@ def process_file(file_path, nlp=None, annotator=None):
         output["metadata"] = build_metadata([], corrected_text, original_text)
         return _finalize_output(output, file_path)
 
-    both_succeeded = corrected_a is not None and corrected_b is not None
+    # Run ERRANT on each successful correction pass
+    successful_results = [r for r in results if r is not None]
+    edit_lists = []
+    for res in successful_results:
+        cor_doc = annotator.parse(res) if res else orig_doc
+        edits = annotator.annotate(orig_doc, cor_doc)
+        edit_lists.append(edits)
 
-    cor_doc_a = annotator.parse(corrected_a) if corrected_a else orig_doc
-    edits_a = annotator.annotate(orig_doc, cor_doc_a)
+    total_edit_count = sum(len(el) for el in edit_lists)
 
-    cor_doc_b = annotator.parse(corrected_b) if corrected_b else orig_doc
-    edits_b = annotator.annotate(orig_doc, cor_doc_b) if corrected_b else []
-
-    # GAP-3: Intersect edits from both passes
-    confirmed_edits = intersect_edits(edits_a, edits_b)
-    uncertain_count = max(len(edits_a), len(edits_b)) - len(confirmed_edits) if both_succeeded else 0
-    use_edits = confirmed_edits if confirmed_edits else (edits_b if corrected_a is None else edits_a)
+    # Majority voting: adopt edits that appear in >= VOTE_THRESHOLD passes
+    confirmed_edits = intersect_edits(edit_lists, VOTE_THRESHOLD)
+    uncertain_count = total_edit_count - len(confirmed_edits) if edit_lists else 0
+    use_edits = confirmed_edits if confirmed_edits else (edit_lists[0] if edit_lists else [])
 
     cor_doc = annotator.parse(corrected_text)
 
@@ -602,7 +620,7 @@ def process_file(file_path, nlp=None, annotator=None):
     # GAP-1: Overcorrection detection + GAP-5: Metadata
     errors_list, uncategorised = classify_edits(use_edits)
     metadata = build_metadata(use_edits, corrected_text, original_text)
-    metadata["uncertain_edit_count"] = uncertain_count if both_succeeded else len(use_edits) // 2
+    metadata["uncertain_edit_count"] = uncertain_count if len(successful_results) >= 2 else len(use_edits) // 2
 
     corrected_typst = build_corrected_typst(orig_doc, use_edits)
 
@@ -618,6 +636,9 @@ def process_file(file_path, nlp=None, annotator=None):
     output = _build_output(student_id, original_text, corrected_text, word_count, student_info,
                            sentence_pairs, {"errors": errors_list, "uncategorised": uncategorised},
                            corrected_typst, error_rate, use_edits)
+    output["record_id"] = record_id
+    output["submission_date"] = submission_date
+    output["topic"] = topic
     output["metadata"] = metadata
 
     return _finalize_output(output, file_path)
@@ -656,8 +677,8 @@ def _finalize_output(output, file_path):
 
 def write_output(output, file_path):
     folder_name = file_path.parent.name
-    student_id = output.get("student_id", "unknown")
-    output_filename = f"{folder_name}-{student_id}.json"
+    record_id = output.get("record_id") or output.get("student_id", "unknown")
+    output_filename = f"{folder_name}-{record_id}.json"
     output_path = LOCAL_WORKING_DIR / output_filename
 
     LOCAL_WORKING_DIR.mkdir(parents=True, exist_ok=True)
@@ -665,7 +686,6 @@ def write_output(output, file_path):
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     print(f"  Saved to: {output_path}")
-    print(f"  Errors: {output['errant_analysis']['errors']}")
     tc = sum(e["count"] for e in output["errant_analysis"]["errors"])
     print(f"  Total corrections: {tc}, rate: {output['error_rate']}%")
     print(f"  Uncat: {len(output['errant_analysis']['uncategorised'])}")
@@ -685,6 +705,7 @@ def main_batch(files):
 
     results = []
     n_workers = min(MAX_WORKERS, len(files))
+    pbar = tqdm(total=len(files), unit="file", position=0)
     with ThreadPoolExecutor(max_workers=n_workers) as executor:
         future_to_file = {
             executor.submit(process_file, f, nlp, annotator): f
@@ -697,10 +718,12 @@ def main_batch(files):
                 if r:
                     results.append(r)
             except Exception as e:
-                print(f"  Error processing {f.name}: {e}")
+                tqdm.write(f"  Error processing {f.name}: {e}")
+            pbar.update(1)
 
-    print(f"\n{'='*50}")
-    print(f"Done. Processed {len(results)}/{len(files)} files.")
+    pbar.close()
+    tqdm.write(f"\n{'='*50}")
+    tqdm.write(f"Done. Processed {len(results)}/{len(files)} files.")
     tc = sum(
         sum(e["count"] for e in r["errant_analysis"]["errors"])
         for r in results
@@ -712,7 +735,7 @@ def main_batch(files):
 
 def main():
     if not API_KEY:
-        print("Error: OPENROUTER_API_KEY not set. Add it to .env or export it.")
+        print("Error: no API key found. Set OPENAI_API_KEY in .env or environment.")
         sys.exit(1)
 
     files = find_output_files()
@@ -736,7 +759,7 @@ def main():
 if __name__ == "__main__":
     if "--batch" in sys.argv:
         if not API_KEY:
-            print("Error: OPENROUTER_API_KEY not set. Add it to .env or export it.")
+            print("Error: no API key found. Set OPENAI_API_KEY in .env or environment.")
             sys.exit(1)
         files = find_output_files()
         # Optional folder filter after --batch, e.g. --batch test2
