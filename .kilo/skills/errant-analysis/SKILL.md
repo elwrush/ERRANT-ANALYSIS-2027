@@ -10,6 +10,7 @@ Take transcribed student essay JSONs (output from `ingest-images`), generate a g
 |------|------|
 | Word count script | `src/add_word_count.py` |
 | Script | `src/errant_analysis.py` |
+| Supabase setup | `src/setup_error_analysis.py` |
 | Tests | `tests/test_errant.py` |
 | Fixtures | `tests/fixtures/error_golden.json` |
 
@@ -19,6 +20,8 @@ Take transcribed student essay JSONs (output from `ingest-images`), generate a g
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
+
+Set environment variables (see Configuration table below).
 
 ## Input
 
@@ -39,10 +42,13 @@ Saved to `local-working/{folder}-{student_id}.json`:
   "corrected_text": "...",
   "sentence_pairs": [],
   "errant_analysis": {
-    "errors": [],
+    "errors": [
+      {"type": "R:SPELL", "count": 5, "example": "recieve -> receive"},
+      {"type": "R:DET", "count": 3, "example": "a -> an"}
+    ],
     "uncategorised": []
   },
-  "corrected_with_markup": "...",
+  "corrected_typst": "...",
   "error_rate": 30,
     "metadata": {
     "model": "google/gemma-4-31b-it",
@@ -61,6 +67,24 @@ Saved to `local-working/{folder}-{student_id}.json`:
 }
 ```
 
+## Supabase upload
+
+After ERRANT analysis completes, the pipeline inserts a row into the `error_reports` Supabase table with:
+
+- `student_id`, `class`, `name`, `error_percent`, `summary` — base fields
+- **45 error code columns** (`r_spell`, `r_det`, `r_verb_tense`, `m_noun`, `u_punct`, etc.) — one per ERRANT code, populated with the count for that student (0 if none)
+
+The code-to-column mapping is defined in `ERRANT_CODE_TO_COLUMN` (line ~184 of `src/errant_analysis.py`). Colon-delimited codes like `R:NOUN:NUM` are sanitized to `r_noun_num`. All 45 codes are mapped:
+
+| Group | Column names |
+|-------|-------------|
+| R: (24) | `r_noun`, `r_noun_num`, `r_noun_poss`, `r_noun_infl`, `r_verb`, `r_verb_tense`, `r_verb_sva`, `r_verb_form`, `r_verb_infl`, `r_adj`, `r_adj_form`, `r_adv`, `r_prep`, `r_pron`, `r_det`, `r_conj`, `r_part`, `r_punct`, `r_spell`, `r_orth`, `r_morph`, `r_wo`, `r_contr` |
+| M: (11) | `m_noun`, `m_noun_num`, `m_verb`, `m_verb_tense`, `m_verb_form`, `m_prep`, `m_pron`, `m_det`, `m_conj`, `m_part`, `m_punct` |
+| U: (8) | `u_noun`, `u_verb`, `u_prep`, `u_pron`, `u_det`, `u_conj`, `u_part`, `u_punct` |
+| Other (2) | `other`, `unk` |
+
+**Setup**: Run `python src/setup_error_analysis.py` to add the columns to `error_reports`. Requires `SUPABASE_DB_URL` in `.env` (get from Supabase Dashboard → Project Settings → Database → Connection string URI). Falls back to printing SQL if DB_URL not set.
+
 ## Configuration
 
 | Config | Value |
@@ -76,6 +100,9 @@ Saved to `local-working/{folder}-{student_id}.json`:
 | Rate limiting | exponential backoff (2^n + jitter) on errors |
 | Jitter | 0.5–1.5s between API calls |
 | API key | `OPENROUTER_API_KEY` in `.env` or environment |
+| Supabase URL | `SUPABASE_URL` in `.env` |
+| Supabase key | `SUPABASE_ESL_KEY` in `.env` |
+| DB connection | `SUPABASE_DB_URL` in `.env` (for `setup_error_analysis.py` only) |
 | Parallel workers | 5 (`ThreadPoolExecutor`) |
 
 ## Cost estimate

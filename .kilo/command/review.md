@@ -56,7 +56,7 @@ Check every changed file against the rules below. List all violations with file 
 ### Output JSON (`outputs/*.json`, `local-working/*.json`)
 
 1. **Ingestion schema** — Must have exactly `student_id` (string) and `student_text` keys.
-2. **ERRANT schema** — Must have all keys per errant-analysis SKILL.md schema: `student_id`, `original_text`, `corrected_text`, `sentence_pairs`, `errant_analysis`, `corrected_with_markup`, `error_rate`, `metadata`.
+2. **ERRANT schema** — Must have all keys per errant-analysis SKILL.md schema: `student_id`, `original_text`, `corrected_text`, `sentence_pairs`, `errant_analysis`, `corrected_typst`, `error_rate`, `metadata`.
 3. **Paragraph breaks** — `student_text` uses `\n`, not `<br>` or raw `\n\n`.
 4. **No model leakage** — No raw markdown fences or model commentary in output fields.
 

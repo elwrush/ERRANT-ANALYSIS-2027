@@ -149,46 +149,11 @@ def esc(text):
     return text
 
 
-def convert_markup(markup):
-    """Convert <u>text</u> to #underline[text] for typst, fixing legacy spacing issues."""
-    # Fix adjacent underline tags that lost inter-word whitespace in stored markup
-    markup = re.sub(r"</u><u>", "</u> <u>", markup)
-    def _repl(m):
-        return "#underline[" + esc(m.group(1)) + "]"
-    result = re.sub(r"<u>(.*?)</u>", _repl, markup)
-    # Fix missing spaces between plain text and adjacent #underline tags
-    result = re.sub(r"([^\s\W])#underline\[", r"\1 #underline[", result)
-    result = re.sub(r"#underline\[([^\]]+)\](?=[^\s\W])", r"#underline[\1] ", result)
-    result = result.replace("\n", " \\\n")
-    return result
-
-
 def build_typ_header():
     lines = []
-    # Small margin for all pages — header floats into it via place() on first pages
-    lines.append('#set page(paper: "a4", margin: (x: 1.5cm, top: 2.5cm, bottom: 1.5cm))')
+    lines.append('#set page(paper: "a4", margin: (x: 1.5cm, top: 2.0cm, bottom: 1.5cm))')
     lines.append('#set text(font: "Roboto", size: 14pt)')
     lines.append('#set par(leading: 0.5em)')
-    lines.append("")
-    lines.append("#show: doc => {")
-    lines.append("  set page(")
-    lines.append("    header: context {")
-    lines.append("      if calc.rem(counter(page).get().first() - 1, 4) == 0 {")
-    lines.append("        place(top + left, dy: 0cm)[")
-    lines.append("          grid(")
-    lines.append("            columns: (1fr, 2fr, 1fr),")
-    lines.append("            align: (left + bottom, center + bottom, right + bottom),")
-    lines.append('            image("/images/ACT.png", height: 1.25cm),')
-    lines.append('            text(size: 18pt, weight: "bold")[Mathayom Program],')
-    lines.append('            image("/images/cambridge.png", height: 2.2cm),')
-    lines.append("          )")
-    lines.append("          line(length: 100%, stroke: 1.0pt)")
-    lines.append("        ]")
-    lines.append("      }")
-    lines.append("    },")
-    lines.append("  )")
-    lines.append("  doc")
-    lines.append("}")
     lines.append("")
     return "\n".join(lines)
 
@@ -208,13 +173,23 @@ def build_student_block(student, idx):
     level = _infer_cefr_level(student.get("class", ""))
     target = B1_TARGET if level == "B1" else B2_TARGET
 
-    markup = student.get("corrected_with_markup", "")
-    marked = convert_markup(markup)
+    markup = student.get("corrected_typst", student.get("corrected_with_markup", ""))
+    marked = markup.replace("\n", "\n\n")
 
     lines = []
-    if idx > 0:
-        lines.append("#pagebreak()")
-        lines.append("")
+
+    # Masthead grid with logos and separator line
+    lines.append('#grid(')
+    lines.append('  columns: (0.8fr, 2fr, 1.2fr),')
+    lines.append('  align: (left + horizon, center + horizon, right + horizon),')
+    lines.append('  image("/images/ACT.png", height: 1.56cm),')
+    lines.append('  text(size: 18pt, weight: "bold")[Mathayom Program],')
+    lines.append('  image("/images/cambridge.png", height: 2.2cm),')
+    lines.append(')')
+    lines.append('#line(length: 100%, stroke: 1.0pt)')
+    lines.append('')
+    lines.append('#v(1em)')
+    lines.append('')
 
     lines.append('#align(center, text(size: 16pt, weight: "bold")[Writing Accuracy Feedback Report])')
     lines.append(f'#align(center, text(size: 11pt)[{raw_name} - {sid} - {cls}])')
@@ -245,19 +220,19 @@ def build_student_block(student, idx):
     lines.append("#pagebreak()")
     lines.append("")
     lines.append('#align(center, text(size: 16pt, weight: "bold")[Your Writing with Corrections])')
-    lines.append('#align(center, text(size: 11pt)[We scanned your writing for errors and underlined the corrections. Carefully comparing the original and corrected versions will help you become more aware of common mistakes and improve your writing skills.])')
+    lines.append('#align(center, text(size: 11pt)[I scanned your writing for errors and underlined the corrections. Carefully comparing the original and corrected versions will help you become more aware of common mistakes\\')
+    lines.append('and improve your writing skills.])')
     lines.append("")
     lines.append("#v(0.5em)")
     lines.append("")
     lines.append(marked)
     lines.append("")
     # Pad to exactly 4 pages: zero-width invisible anchor + blank pages
-    lines.append(f'#box(width: 0pt, height: 0pt) <pad-anchor-{idx}>')
+    lines.append(f'#box(width: 0pt) <pad-anchor-{idx}>')
     lines.append('#context {')
     lines.append(f'  let num = counter(page).at(label("pad-anchor-{idx}")).first()')
-    lines.append('  let gap = calc.rem-euclid(4 - num, 4)')
-    lines.append('  for _ in range(gap) {')
-    lines.append('    pagebreak()')
+    lines.append('  for _ in range(calc.rem-euclid(4 - num, 4)) {')
+    lines.append('    page([])')
     lines.append('  }')
     lines.append('}')
 

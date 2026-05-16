@@ -28,6 +28,10 @@ This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for
 - `.kilo/skills/local-report/SKILL.md` — Full workflow for generating Typst report booklets with summary, charts, and PDF compilation
 - `.kilo/skills/tavily-websearch/SKILL.md` — Global skill: Web search via Tavily AI Search API (5 pre-written Python models). Use for research, fact-checking, or content gathering. Copy the script verbatim from the skill, change only the query/URL/parameters.
 
+## Reference docs
+
+- `.kilo/reference/typst-troubleshooting.md` — Catalogue of Typst bugs encountered and fixes applied (page geometry, context blocks, pad-to-four, mode rules). **Consult before modifying any Typst layout code.**
+
 ## Environment variables
 
 | Variable | Purpose | Set? |
@@ -58,6 +62,7 @@ Context7 (`CONTEXT7_API_KEY`) is an MCP server for library documentation — **T
 | Community patterns & solutions | **Tavily web search** | `tavily search "Typst pad to multiple of 4 pages pagebreak"` |
 | Source-level docs | **`gh api`** on `typst/typst` repo | `gh api repos/typst/typst/contents/docs/...` |
 | Changelog / version diffs | **`gh api`** changelog | `docs/content/changelog/` |
+| Typst bugs & fixes (catalogued) | **Local reference** | `.kilo/reference/typst-troubleshooting.md` |
 
 ## Python project
 
@@ -89,7 +94,7 @@ pytest tests/ -v
 
 - Images: `inputs/{folder}/` — any JPEG or PNG filename accepted
 - Ingestion output: `outputs/{folder}/{student_id}.json` with keys `student_id` and `student_text`
-- ERRANT output: `local-working/{folder}-{student_id}.json` with full error analysis, sentence pairs, markup, and metadata
+- ERRANT output: `local-working/{folder}-{student_id}.json` with full error analysis, sentence pairs, Typst-native `corrected_typst` field, and metadata
 - Multi-page essays combined into a single JSON, pages joined with `\n`
 - API key: `OPENROUTER_API_KEY` in `.env` or environment
 

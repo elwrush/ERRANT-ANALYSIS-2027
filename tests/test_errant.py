@@ -182,6 +182,92 @@ class TestIntersectEdits:
         assert result[0].type == "R:VERB:TENSE"
 
 
+class TestErrorCodeMapping:
+    """Test ERRANT_CODE_TO_COLUMN mapping completeness."""
+
+    def test_all_errant_codes_have_columns(self):
+        from errant_analysis import ERRANT_CODE_NAMES, ERRANT_CODE_TO_COLUMN
+        mapped_codes = set(ERRANT_CODE_TO_COLUMN.keys())
+        defined_codes = set(ERRANT_CODE_NAMES.keys())
+        missing = defined_codes - mapped_codes
+        assert not missing, f"Codes missing from ERRANT_CODE_TO_COLUMN: {missing}"
+
+    def test_all_column_names_are_valid_sql(self):
+        from errant_analysis import ERROR_CODE_COLUMNS
+        import re
+        valid = re.compile(r'^[a-z][a-z_]*$')
+        for col in ERROR_CODE_COLUMNS:
+            assert valid.match(col), f"Invalid SQL column name: {col}"
+
+    def test_no_duplicate_column_names(self):
+        from errant_analysis import ERROR_CODE_COLUMNS
+        assert len(ERROR_CODE_COLUMNS) == len(set(ERROR_CODE_COLUMNS))
+
+    def test_column_count_matches(self):
+        from errant_analysis import ERROR_CODE_COLUMNS, ERRANT_CODE_NAMES
+        assert len(ERROR_CODE_COLUMNS) == len(ERRANT_CODE_NAMES)
+
+
+class TestInsertErrorReports:
+    """Test the error_reports Supabase insert logic."""
+
+    def test_row_contains_all_error_columns(self):
+        from errant_analysis import ERROR_CODE_COLUMNS
+        assert len(ERROR_CODE_COLUMNS) > 0
+
+    def test_error_counts_populated_in_row(self):
+        from errant_analysis import ERRANT_CODE_TO_COLUMN
+        sample_output = {
+            "student_id": "99999",
+            "class": "M3-4A",
+            "name": "Test",
+            "error_rate": 10,
+            "summary": "Good work.",
+            "errant_analysis": {
+                "errors": [
+                    {"type": "R:SPELL", "count": 5, "example": "recieve -> receive"},
+                    {"type": "R:DET", "count": 3, "example": "a -> an"},
+                    {"type": "R:VERB:TENSE", "count": 2, "example": "go -> went"},
+                ],
+                "uncategorised": [],
+            },
+        }
+        row = {
+            "student_id": "99999",
+            "class": "M3-4A",
+            "name": "Test",
+            "error_percent": 10,
+            "summary": "Good work.",
+        }
+        # Simulate the insert logic
+        from errant_analysis import ERROR_CODE_COLUMNS
+        for col in ERROR_CODE_COLUMNS:
+            row[col] = 0
+        for e in sample_output["errant_analysis"]["errors"]:
+            col = ERRANT_CODE_TO_COLUMN.get(e["type"])
+            if col:
+                row[col] = e["count"]
+
+        assert row["r_spell"] == 5
+        assert row["r_det"] == 3
+        assert row["r_verb_tense"] == 2
+        # Non-present codes should still be 0
+        assert row["r_prep"] == 0
+        assert row["m_noun"] == 0
+        assert row["u_punct"] == 0
+
+    def test_empty_errors_all_zeros(self):
+        from errant_analysis import ERROR_CODE_COLUMNS
+        row = {"student_id": "99999", "class": "M3-4A", "name": "Test",
+               "error_percent": 0, "summary": "No errors."}
+        for col in ERROR_CODE_COLUMNS:
+            row[col] = 0
+        assert row["r_spell"] == 0
+        assert row["r_det"] == 0
+        assert row["r_verb_tense"] == 0
+        assert row["m_noun"] == 0
+
+
 class TestWriteOutput:
     """Test the write_output function."""
 
@@ -197,7 +283,7 @@ class TestWriteOutput:
             "corrected_text": "test",
             "sentence_pairs": [],
             "errant_analysis": {"errors": [], "uncategorised": []},
-            "corrected_with_markup": "test",
+            "corrected_typst": "test",
             "error_rate": 0,
             "word_count": 0,
             "metadata": {

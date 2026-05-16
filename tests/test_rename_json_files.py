@@ -38,7 +38,7 @@ class TestExtractStudentId:
             "corrected_text": "test",
             "sentence_pairs": [],
             "errant_analysis": {"errors": [], "uncategorised": []},
-            "corrected_with_markup": "test",
+            "corrected_typst": "test",
             "error_rate": 0,
             "metadata": {},
         }))

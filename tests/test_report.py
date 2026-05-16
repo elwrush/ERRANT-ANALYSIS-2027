@@ -17,7 +17,7 @@ class TestTypContent:
             "summary": "Dear Test, good writing!",
             "original_text": "Hello world.",
             "corrected_text": "Hello world.",
-            "corrected_with_markup": "Hello world.",
+            "corrected_typst": "Hello world.",
             "errant_analysis": {"errors": [
                 {"type": "R:SPELL", "count": 2, "example": "hello -> hello"},
             ]},
@@ -29,12 +29,17 @@ class TestTypContent:
         assert "Test" in result
         assert "Hello world" in result
         assert "Your Writing with Corrections" in result
-        assert "We scanned your writing for errors and underlined the corrections" in result
+        assert "I scanned your writing for errors and underlined the corrections" in result
         assert "target error rate" in result.lower()
         assert "Writing Accuracy Feedback Report" in result
         assert "*Dear Test,*" in result
         assert 'pad-anchor-0' in result
         assert 'pagebreak()' in result
+        assert 'Mathayom Program' in result
+        assert 'ACT.png' in result
+        assert 'cambridge.png' in result
+        assert '#grid(' in result
+        assert '#line(' in result
 
     def test_header_is_valid(self):
         from generate_report import build_typ_header
@@ -42,20 +47,14 @@ class TestTypContent:
         assert isinstance(result, str)
         assert "Roboto" in result
         assert "14pt" in result
-        assert "Mathayom Program" in result
-        assert "place(top + left, dy: 0cm)[" in result
+        assert "2.0cm" in result
+        assert "a4" in result
 
     def test_esc_handles_special_chars(self):
         from generate_report import esc
         assert esc("#hello") == "\\#hello"
         assert esc("$5") == "\\$5"
         assert esc("[text]") == "\\[text\\]"
-
-    def test_convert_markup_handles_u_tags(self):
-        from generate_report import convert_markup
-        result = convert_markup("Hello <u>world</u>.")
-        assert "#underline[" in result
-        assert "world" in result
 
 
 class TestChartGeneration:

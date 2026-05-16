@@ -8,6 +8,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from _retry import RetryableError, retry
+from generate_report import esc
 import requests
 import spacy
 import errant
@@ -181,6 +182,27 @@ ERRANT_CODE_NAMES = {
 }
 
 
+ERRANT_CODE_TO_COLUMN = {
+    "R:NOUN": "r_noun", "R:NOUN:NUM": "r_noun_num", "R:NOUN:POSS": "r_noun_poss", "R:NOUN:INFL": "r_noun_infl",
+    "R:VERB": "r_verb", "R:VERB:TENSE": "r_verb_tense", "R:VERB:SVA": "r_verb_sva",
+    "R:VERB:FORM": "r_verb_form", "R:VERB:INFL": "r_verb_infl",
+    "R:ADJ": "r_adj", "R:ADJ:FORM": "r_adj_form",
+    "R:ADV": "r_adv", "R:PREP": "r_prep", "R:PRON": "r_pron", "R:DET": "r_det",
+    "R:CONJ": "r_conj", "R:PART": "r_part", "R:PUNCT": "r_punct",
+    "R:SPELL": "r_spell", "R:ORTH": "r_orth", "R:MORPH": "r_morph",
+    "R:WO": "r_wo", "R:CONTR": "r_contr",
+    "M:NOUN": "m_noun", "M:NOUN:NUM": "m_noun_num",
+    "M:VERB": "m_verb", "M:VERB:TENSE": "m_verb_tense", "M:VERB:FORM": "m_verb_form",
+    "M:PREP": "m_prep", "M:PRON": "m_pron", "M:DET": "m_det",
+    "M:CONJ": "m_conj", "M:PART": "m_part", "M:PUNCT": "m_punct",
+    "U:NOUN": "u_noun", "U:VERB": "u_verb", "U:PREP": "u_prep", "U:PRON": "u_pron",
+    "U:DET": "u_det", "U:CONJ": "u_conj", "U:PART": "u_part", "U:PUNCT": "u_punct",
+    "OTHER": "other", "UNK": "unk",
+}
+
+ERROR_CODE_COLUMNS = list(ERRANT_CODE_TO_COLUMN.values())
+
+
 def human_error_type(err_type):
     """Convert an ERRANT error code to a human-readable description."""
     if err_type in ERRANT_CODE_NAMES:
@@ -285,8 +307,15 @@ def insert_error_reports(output: dict):
             "error_percent": output["error_rate"],
             "summary": output.get("summary", ""),
         }
+        for col in ERROR_CODE_COLUMNS:
+            row[col] = 0
+        errors = output.get("errant_analysis", {}).get("errors", [])
+        for e in errors:
+            col = ERRANT_CODE_TO_COLUMN.get(e["type"])
+            if col:
+                row[col] = e["count"]
         client.table("error_reports").insert(row).execute()
-        print(f"  Inserted into error_reports for {output['student_id']}")
+        print(f"  Inserted into error_reports for {output['student_id']} ({len(errors)} error types)")
     except Exception as e:
         print(f"  Warning: could not insert into error_reports: {e}")
 
@@ -333,7 +362,7 @@ def post_classify_other(o_str, c_str):
     return "OTHER"
 
 
-def generate_markup(orig_doc, edits):
+def build_corrected_typst(orig_doc, edits):
     edits = sorted(edits, key=lambda e: e.o_start)
     tokens = list(orig_doc)
     result_parts = []
@@ -352,7 +381,14 @@ def generate_markup(orig_doc, edits):
                 edit_idx += 1
                 continue
             if edit.c_toks:
-                result_parts.append(f"<u>{edit.c_str}</u>")
+                result_parts.append(f"#underline[{esc(edit.c_str)}]")
+                # Preserve trailing whitespace from last consumed token
+                if edit.o_toks:
+                    last_idx = edit.o_end - 1
+                    if 0 <= last_idx < len(tokens):
+                        orig_tok = tokens[last_idx]
+                        ws = orig_tok.text_with_ws[len(orig_tok.text):]
+                        result_parts.append(ws)
             i = edit.o_end if edit.o_toks else (edit.o_end if edit.o_end > edit.o_start else i)
             edit_idx += 1
             # Preserve whitespace between consecutive edits
@@ -365,14 +401,9 @@ def generate_markup(orig_doc, edits):
             result_parts.append(tokens[i].text_with_ws)
             i += 1
 
-    return "".join(result_parts)
-
-
-def fix_markup_spacing(marked_up):
-    # Add space between adjacent underline tags (consecutive edits lose inter-word whitespace)
-    marked_up = re.sub(r"</u><u>", "</u> <u>", marked_up)
-    marked_up = re.sub(r"</u>(?!\s|$|<)", "</u> ", marked_up)
-    return marked_up
+    result = "".join(result_parts)
+    result = re.sub(r"\](?=[^\s\]\)])", "] ", result)
+    return result
 
 
 def intersect_edits(edits_a, edits_b):
@@ -573,7 +604,7 @@ def process_file(file_path, nlp=None, annotator=None):
     metadata = build_metadata(use_edits, corrected_text, original_text)
     metadata["uncertain_edit_count"] = uncertain_count if both_succeeded else len(use_edits) // 2
 
-    marked_up = fix_markup_spacing(generate_markup(orig_doc, use_edits))
+    corrected_typst = build_corrected_typst(orig_doc, use_edits)
 
     cor_sentences = [sent.text.strip() for sent in cor_doc.sents]
     max_pairs = min(len(orig_sentences), len(cor_sentences)) if orig_sentences else 0
@@ -586,21 +617,21 @@ def process_file(file_path, nlp=None, annotator=None):
 
     output = _build_output(student_id, original_text, corrected_text, word_count, student_info,
                            sentence_pairs, {"errors": errors_list, "uncategorised": uncategorised},
-                           marked_up, error_rate, use_edits)
+                           corrected_typst, error_rate, use_edits)
     output["metadata"] = metadata
 
     return _finalize_output(output, file_path)
 
 
 def _build_output(student_id, original_text, corrected_text, word_count, student_info,
-                  sentence_pairs, errant_analysis, marked_up, error_rate, edits):
+                  sentence_pairs, errant_analysis, corrected_typst, error_rate, edits):
     return {
         "student_id": student_id,
         "original_text": original_text,
         "corrected_text": corrected_text,
         "sentence_pairs": sentence_pairs,
         "errant_analysis": errant_analysis,
-        "corrected_with_markup": marked_up,
+        "corrected_typst": corrected_typst,
         "error_rate": error_rate,
         "word_count": word_count,
         "name": student_info.get("name", ""),
