@@ -37,7 +37,7 @@ def find_json_files(directory: Path) -> list[Path]:
 
 def extract_student_id(file_path: Path) -> str | None:
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
         sid = data.get("student_id", "").strip()
         return sid if sid else None

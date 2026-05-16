@@ -1,2 +1,5 @@
+[lint]
+extend-select = ["C4", "SIM", "UP"]
+
 [lint.per-file-ignores]
 "tests/**" = ["E402"]

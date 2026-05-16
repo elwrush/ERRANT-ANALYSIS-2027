@@ -10,7 +10,11 @@ from io import BytesIO
 from pathlib import Path
 from PIL import Image
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
+from _retry import RetryableError, retry
+
+MAX_WORKERS = 5
 
 load_dotenv()
 
@@ -125,6 +129,7 @@ def preprocess_image(image_path):
     return f"data:image/jpeg;base64,{b64}"
 
 
+@retry(max_retries=MAX_RETRIES)
 def call_openrouter(data_url):
     if not API_KEY:
         print("  Error: OPENROUTER_API_KEY not set")
@@ -147,41 +152,30 @@ def call_openrouter(data_url):
         ],
     }
 
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            r = requests.post(API_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-            r.raise_for_status()
-            data = r.json()
-            content = data["choices"][0]["message"]["content"].strip()
+    try:
+        r = requests.post(API_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+        content = data["choices"][0]["message"]["content"].strip()
 
-            # Try to parse JSON from the response
-            parsed = try_parse_json(content)
-            if parsed:
-                return parsed
+        parsed = try_parse_json(content)
+        if parsed:
+            return parsed
 
-            print(f"  Warning: could not parse model response as JSON. Raw: {content[:200]}")
-            return None
+        print(f"  Warning: could not parse model response as JSON. Raw: {content[:200]}")
+        return None
 
-        except requests.exceptions.HTTPError as e:
-            status = r.status_code
-            if status in (429, 502, 503) and attempt < MAX_RETRIES:
-                delay = (2 ** attempt) + random.uniform(0, 1)
-                print(f"  Rate limit/server error ({status}), retrying in {delay:.1f}s...")
-                time.sleep(delay)
-                continue
-            print(f"  Error: HTTP {status} — {e}")
-            return None
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            if attempt < MAX_RETRIES:
-                delay = (2 ** attempt) + random.uniform(0, 1)
-                print(f"  Connection error, retrying in {delay:.1f}s...")
-                time.sleep(delay)
-                continue
-            print(f"  Error: {e}")
-            return None
-        except (KeyError, IndexError, json.JSONDecodeError) as e:
-            print(f"  Error: unexpected API response — {e}")
-            return None
+    except requests.exceptions.HTTPError as e:
+        status = r.status_code
+        if status in (429, 502, 503):
+            raise RetryableError(f"Rate limit/server error ({status})")
+        print(f"  Error: HTTP {status} — {e}")
+        return None
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        raise RetryableError(f"Connection error: {e}")
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        print(f"  Error: unexpected API response — {e}")
+        return None
 
 
 def try_parse_json(text):
@@ -212,6 +206,8 @@ def process_student_group(group, folder_name):
     student_id = group["student_id"]
     page_paths = group["pages"]
     print(f"\n  Processing student {student_id} ({len(page_paths)} pages)...")
+
+    time.sleep(random.uniform(0, JITTER_MIN))
 
     page_texts = []
     extracted_id = None
@@ -288,11 +284,21 @@ def main():
 
     print(f"Found {len(groups)} student(s) to process.\n")
 
+    n_workers = min(MAX_WORKERS, len(groups))
     results = []
-    for group in groups:
-        r = process_student_group(group, selected.name)
-        if r:
-            results.append(r)
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        future_to_group = {
+            executor.submit(process_student_group, group, selected.name): group
+            for group in groups
+        }
+        for future in as_completed(future_to_group):
+            group = future_to_group[future]
+            try:
+                r = future.result()
+                if r:
+                    results.append(r)
+            except Exception as e:
+                print(f"  Error processing student {group['student_id']}: {e}")
 
     print(f"\n{'='*50}")
     print(f"Done. Processed {len(results)}/{len(groups)} students.")

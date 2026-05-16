@@ -21,7 +21,7 @@ def main():
         for f in sorted(d.iterdir()):
             if f.suffix != ".json":
                 continue
-            with open(f, "r", encoding="utf-8") as fh:
+            with open(f, encoding="utf-8") as fh:
                 data = json.load(fh)
             text = data.get("student_text", "")
             wc = count_words(text)

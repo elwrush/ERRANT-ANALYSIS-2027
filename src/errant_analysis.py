@@ -3,11 +3,11 @@ import os
 import re
 import sys
 import json
-import time
-import random
 import csv
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
+from _retry import RetryableError, retry
 import requests
 import spacy
 import errant
@@ -32,6 +32,7 @@ JITTER_MIN = 0.5
 JITTER_MAX = 1.5
 MULTI_TOKEN_THRESHOLD = 3
 SUMMARY_TEMPERATURE = 0.7
+MAX_WORKERS = 5
 
 STUDENTS_PATH = Path("docs/students.txt")
 
@@ -93,6 +94,7 @@ def call_model_custom(prompt_content, temperature=TEMPERATURE):
     return _call_api(prompt_content, temperature)
 
 
+@retry(max_retries=MAX_RETRIES)
 def _call_api(content, temperature):
     if not API_KEY:
         print("  Error: OPENROUTER_API_KEY not set")
@@ -110,23 +112,16 @@ def _call_api(content, temperature):
         ],
     }
 
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            r = requests.post(API_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-            r.raise_for_status()
-            data = r.json()
-            content = data["choices"][0]["message"]["content"].strip()
-            if content:
-                return content
-            raise ValueError("Empty response")
-        except Exception as e:
-            if attempt < MAX_RETRIES:
-                delay = (2 ** attempt) + random.uniform(0, 1)
-                print(f"  API error, retrying in {delay:.1f}s... ({e})")
-                time.sleep(delay)
-            else:
-                print(f"  Failed after {MAX_RETRIES} retries: {e}")
-                return None
+    try:
+        r = requests.post(API_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+        content = data["choices"][0]["message"]["content"].strip()
+        if content:
+            return content
+        raise ValueError("Empty response")
+    except Exception as e:
+        raise RetryableError(str(e))
 
 
 SUMMARY_PROMPT = """Write a feedback paragraph in this exact format for {name}, a Thai ESL student (error rate: {error_rate}%):
@@ -153,7 +148,7 @@ Output ONLY the feedback paragraph above. Nothing before or after."""
 def lookup_student_info(student_id: str) -> dict:
     if not STUDENTS_PATH.exists():
         return {}
-    with open(STUDENTS_PATH, "r", encoding="utf-8") as f:
+    with open(STUDENTS_PATH, encoding="utf-8") as f:
         reader = csv.reader(f, delimiter="\t")
         next(reader, None)
         for cols in reader:
@@ -407,9 +402,9 @@ def classify_edits(edits):
     return errors_list, uncategorised
 
 
-def process_file(file_path):
+def process_file(file_path, nlp=None, annotator=None):
     print(f"\n=== Processing: {file_path.relative_to(OUTPUTS_DIR)} ===")
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         data = json.load(f)
 
     student_id = data.get("student_id", "unknown")
@@ -424,20 +419,21 @@ def process_file(file_path):
     print(f"  Student: {student_id}")
     print(f"  Student info: {student_info}")
 
-    nlp = spacy.load("en_core_web_sm")
+    if nlp is None:
+        nlp = spacy.load("en_core_web_sm")
     orig_doc = nlp(original_text)
     orig_sentences = [sent.text.strip() for sent in orig_doc.sents]
 
-    annotator = errant.load("en")
+    if annotator is None:
+        annotator = errant.load("en")
 
-    # Double-check: run correction at two different temperatures
-    print("  Correcting text (pass 1, temp=0.1)...")
-    corrected_a = call_model(original_text, TEMPERATURE)
-    if corrected_a:
-        time.sleep(random.uniform(JITTER_MIN, JITTER_MAX))
-
-    print("  Correcting text (pass 2, temp=0.3)...")
-    corrected_b = call_model(original_text, DOUBLE_CHECK_TEMP)
+    # Double-check: run correction at two different temperatures in parallel
+    print("  Correcting text (pass 1, temp=0.1) and (pass 2, temp=0.3)...")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_a = executor.submit(call_model, original_text, TEMPERATURE)
+        future_b = executor.submit(call_model, original_text, DOUBLE_CHECK_TEMP)
+        corrected_a = future_a.result()
+        corrected_b = future_b.result()
 
     # Use the conservative (lower temp) version as primary
     corrected_text = corrected_a or corrected_b or original_text
@@ -489,7 +485,7 @@ def process_file(file_path):
         sentence_pairs.append({"original": orig_sentences[i], "corrected": cor_sentences[i]})
 
     correction_count = sum(eg["count"] for eg in errors_list)
-    error_rate = round((correction_count / word_count * 100)) if word_count > 0 else 0
+    error_rate = round(correction_count / word_count * 100) if word_count > 0 else 0
 
     output = _build_output(student_id, original_text, corrected_text, word_count, student_info,
                            sentence_pairs, {"errors": errors_list, "uncategorised": uncategorised},
@@ -553,6 +549,39 @@ def write_output(output, file_path):
     return output
 
 
+def main_batch(files):
+    nlp = spacy.load("en_core_web_sm")
+    annotator = errant.load("en")
+
+    print(f"Processing {len(files)} file(s) with {MAX_WORKERS} workers...\n")
+
+    results = []
+    n_workers = min(MAX_WORKERS, len(files))
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        future_to_file = {
+            executor.submit(process_file, f, nlp, annotator): f
+            for f in files
+        }
+        for future in as_completed(future_to_file):
+            f = future_to_file[future]
+            try:
+                r = future.result()
+                if r:
+                    results.append(r)
+            except Exception as e:
+                print(f"  Error processing {f.name}: {e}")
+
+    print(f"\n{'='*50}")
+    print(f"Done. Processed {len(results)}/{len(files)} files.")
+    tc = sum(
+        sum(e["count"] for e in r["errant_analysis"]["errors"])
+        for r in results
+    )
+    print(f"Total errors detected: {tc}")
+    print(f"Output: {LOCAL_WORKING_DIR}/")
+    print(f"{'='*50}")
+
+
 def main():
     if not API_KEY:
         print("Error: OPENROUTER_API_KEY not set. Add it to .env or export it.")
@@ -577,4 +606,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--batch" in sys.argv:
+        if not API_KEY:
+            print("Error: OPENROUTER_API_KEY not set. Add it to .env or export it.")
+            sys.exit(1)
+        files = find_output_files()
+        if not files:
+            print(f"No JSON files found in {OUTPUTS_DIR}/")
+            print("Run ingest-images first to produce output files.")
+            sys.exit(1)
+        main_batch(files)
+    else:
+        main()

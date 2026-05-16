@@ -25,7 +25,7 @@ class TestErrantDetection:
         cor = annotator.parse(fixture["expected_correction"])
         edits = annotator.annotate(orig, cor)
 
-        detected_types = set(e.type for e in edits)
+        detected_types = {e.type for e in edits}
         expected_set = set(fixture["expected_errors"])
 
         missing = expected_set - detected_types
@@ -69,7 +69,7 @@ class TestCorrectionModel:
         edits_actual = annotator.annotate(orig_doc, cor_doc_actual)
 
         # At least 50% of the same error types should be detected
-        actual_types = set(e.type for e in edits_actual if e.type not in ("UNK",))
+        actual_types = {e.type for e in edits_actual if e.type not in ("UNK",)}
         expected_types = set(fixture["expected_errors"])
 
         overlap = actual_types & expected_types

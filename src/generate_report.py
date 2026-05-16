@@ -199,7 +199,7 @@ def main():
     generated = 0
 
     for file_path in files:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             student = json.load(f)
 
         sid = student["student_id"]

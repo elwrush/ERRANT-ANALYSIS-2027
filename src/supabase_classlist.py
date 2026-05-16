@@ -24,7 +24,7 @@ def get_client() -> Client:
 
 def parse_students(path: Path) -> list[dict]:
     rows = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         reader = csv.reader(f, delimiter="\t")
         header = next(reader, None)
         if header is None:
