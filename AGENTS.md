@@ -27,6 +27,7 @@ This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for
 - `.kilo/skills/rename-json-files/SKILL.md` — Full workflow for renaming ERRANT output files with classlist validation
 - `.kilo/skills/local-report/SKILL.md` — Full workflow for generating Typst report booklets with summary, charts, and PDF compilation
 - `.kilo/skills/tavily-websearch/SKILL.md` — Global skill: Web search via Tavily AI Search API (5 pre-written Python models). Use for research, fact-checking, or content gathering. Copy the script verbatim from the skill, change only the query/URL/parameters.
+- `.kilo/skills/context7-docs/SKILL.md` — Global skill: Query library documentation via Context7 REST API (3 pre-written Python models). Use for checking if documentation exists for a library, then fetching version-specific code examples and API references. Falls back to Tavily when a library is not indexed.
 
 ## Reference docs
 
@@ -38,7 +39,7 @@ This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for
 |----------|---------|------|
 | `OPENAI_API_KEY` | LLM API for corrections & summaries | ✅ |
 | `OPENROUTER_API_KEY` | Fallback if OpenAI direct unavailable | ✅ |
-| `CONTEXT7_API_KEY` | Context7 MCP for library doc retrieval (see Typst research below) | ✅ |
+| `CONTEXT7_API_KEY` | Context7 API key for library doc lookup (via `/context7` global skill) | ✅ |
 | `TAVILY_API_KEY` | Tavily web search | ✅ |
 | `SUPABASE_URL` | Supabase project URL | as needed |
 | `SUPABASE_ESL_KEY` | Supabase service role key | as needed |
@@ -51,11 +52,21 @@ This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for
 | Summary | `gpt-4o-mini` | $0.15 | $0.60 |
 | Ingestion | `google/gemini-2.5-flash-lite-preview-09-2025` | | |
 
-Correction runs at 4 temperatures (0.1, 0.3, 0.5, 0.7) with edit-level majority voting (≥3 of 4 passes). Summary runs at 0.8. Both use the OpenAI direct API. Full pipeline cost: ~$0.00042 per student.
+Correction runs at 2 temperatures (0.1, 0.5) with edit-level majority voting (both must agree). Summary runs at 0.8. Both use the OpenAI direct API. Full pipeline cost: ~$0.00039 per student.
+
+## Context7 documentation lookup
+
+Context7 (`CONTEXT7_API_KEY`) indexes library documentation from GitHub repos, websites, npm packages, OpenAPI specs, and llms.txt sources. Use the **`/context7`** slash command (global skill) to query it:
+
+```
+/context7 — search Context7 by library name + specific question → returns code snippets and docs
+```
+
+Loads the global skill at `C:\Users\elwru\.kilo\skills\context7-docs/SKILL.md`. Falls back to Tavily → web fetch → GitHub API when a library is not indexed.
 
 ## Typst research methodology
 
-Context7 (`CONTEXT7_API_KEY`) is an MCP server for library documentation — **Typst is NOT indexed** (returns 404). Use this tiered approach instead:
+Context7 has Typst indexed (ID: `/typst/typst`). Use Context7 as the first choice for Typst docs. The tiered approach below serves as fallback when Context7 returns insufficient results:
 
 | Need | Tool | Example |
 |------|------|---------|

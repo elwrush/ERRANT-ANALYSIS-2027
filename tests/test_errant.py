@@ -304,3 +304,45 @@ class TestWriteOutput:
             data = json.load(f)
         assert data["metadata"]["identity_check"] is True
         assert data["error_rate"] == 0
+
+
+class TestBatchProgress:
+    """Test the tqdm progress bar in batch mode."""
+
+    def test_progress_bar_shows_counts(self, monkeypatch):
+        from errant_analysis import main_batch
+        import json
+        import io
+        import tempfile
+        from contextlib import redirect_stdout, redirect_stderr
+
+        # Mock heavy dependencies so the test is fast
+        monkeypatch.setattr("errant_analysis.spacy.load", lambda x: None)
+        monkeypatch.setattr("errant_analysis.errant.load", lambda x: None)
+
+        # Mock process_file to return a minimal result without real API calls
+        def mock_process(*args, **kwargs):
+            return {"student_id": "999", "original_text": "test",
+                    "corrected_text": "test", "sentence_pairs": [],
+                    "errant_analysis": {"errors": [], "uncategorised": []},
+                    "corrected_typst": "test", "error_rate": 0, "word_count": 0,
+                    "metadata": {"total_edit_count": 0}}
+
+        monkeypatch.setattr("errant_analysis.process_file", mock_process)
+
+        # Create a few temp JSON files
+        d = Path(tempfile.mkdtemp())
+        files = []
+        for i in range(3):
+            f = d / f"{i}.json"
+            f.write_text(json.dumps({"student_id": str(9000 + i), "student_text": "test."}))
+            files.append(f)
+
+        out = io.StringIO()
+        err = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            main_batch(files)
+
+        combined = out.getvalue() + err.getvalue()
+        assert "Processing 3 file(s)" in out.getvalue(), f"stdout missing header: {out.getvalue()}"
+        assert "Done. Processed 3/3 files." in combined, f"Missing completion message. out={out.getvalue()!r} err={err.getvalue()!r}"

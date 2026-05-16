@@ -98,7 +98,7 @@ The code-to-column mapping is defined in `ERRANT_CODE_TO_COLUMN` (line ~184 of `
 | Summary model | `gpt-4o-mini` |
 | Input price | $0.15 / 1M tokens |
 | Output price | $0.60 / 1M tokens |
-| Correction temperatures | 0.1, 0.3, 0.5, 0.7 (4 passes, majority voting ≥3) |
+| Correction temperatures | 0.1, 0.5 (2 passes, both must agree) |
 | Summary temperature | 0.8 |
 | Context guard | 32K tokens |
 | Rate limiting | exponential backoff (2^n + jitter) on errors |
@@ -108,15 +108,27 @@ The code-to-column mapping is defined in `ERRANT_CODE_TO_COLUMN` (line ~184 of `
 | Supabase key | `SUPABASE_ESL_KEY` in `.env` |
 | DB connection | `SUPABASE_DB_URL` in `.env` (for `setup_error_analysis.py` only) |
 | Parallel workers | 5 (`ThreadPoolExecutor`) |
+| Progress bar | `tqdm` (batch mode only) |
+
+## Progress visualization
+
+Batch mode (`--batch`) shows a real-time `tqdm` progress bar:
+
+- Shows `N/Total files` with estimated time remaining
+- Updates after each record completes
+- Errors are printed inline via `tqdm.write()` without breaking the progress bar
+- Final summary printed at completion: `Done. Processed N/Total files.`
+
+Dependency: `tqdm>=4.0` (listed in `requirements.txt`).
 
 ## Cost estimate
 
 A 150-word essay (~200 tokens) costs roughly:
-- Correction (4 passes): $0.00052 per student
-- Summary: $0.00016 per student
-- **Total: ~$0.00068 per student** (~$0.07 for 100 students)
+- Correction (2 passes): $0.00030 per student
+- Summary: $0.00009 per student
+- **Total: ~$0.00039 per student** (~$0.04 for 100 students)
 
-At scale using gpt-4o-mini: $0.10 for 150 students (full pipeline: correction + summary).
+At scale using gpt-4o-mini: $0.06 for 150 students (full pipeline: correction + summary).
 
 ## ERRANT uncategorised handling
 
@@ -130,16 +142,14 @@ The script includes a `post_classify_other` function that reclassifies ERRANT's 
 
 ## Multi-pass voting (edit-level majority voting)
 
-The pipeline runs correction at **4 temperatures** and applies edit-level majority voting:
+The pipeline runs correction at **2 temperatures** and applies edit-level majority voting:
 
 | Pass | Temperature | Purpose |
 |------|-------------|---------|
 | Pass 1 | 0.1 | Conservative, high-precision corrections |
-| Pass 2 | 0.3 | Slightly more permissive, catches subtle errors |
-| Pass 3 | 0.5 | Moderate diversity, catches alternative patterns |
-| Pass 4 | 0.7 | Maximum diversity, broad coverage |
+| Pass 2 | 0.5 | Moderate diversity, catches alternative patterns |
 
-Only edits present in **at least 3 of 4 passes** are used in the final output. This implements the edit-level majority voting technique from Goto et al. (2025), which the paper shows improves F0.5 by up to 14 points on low-error-density datasets. The threshold of 3 out of 4 provides high precision: the paper demonstrates that edit frequency positively correlates with precision (Figure 3 in their paper). Edits found in fewer than 3 passes are counted in `metadata.uncertain_edit_count`.
+Only edits present in **both passes** are used in the final output. This implements the edit-level majority voting technique from Goto et al. (2025) and Omelianchuk et al. (2024), who show that requiring agreement across independent samples provides high precision with diminishing returns beyond 2 samples. Edits found in only one pass are counted in `metadata.uncertain_edit_count`.
 
 ## Overcorrection detection
 
@@ -156,7 +166,7 @@ The output JSON includes a `metadata` block with processing quality indicators:
 - `overcorrection_count`: number of edits spanning >3 tokens
 - `overcorrection_warnings[]`: details of each potential overcorrection
 - `total_edit_count`: raw count of ERRANT edits before filtering
-- `uncertain_edit_count`: edits found in only one of the two double-check passes
+- `uncertain_edit_count`: edits found in only one of the two passes
 - `edit_width_stats.max_span / avg_span / multi_token_edits`: edit size distribution
 
 ## Codebase research via gh — mandatory before guessing ERRANT internals

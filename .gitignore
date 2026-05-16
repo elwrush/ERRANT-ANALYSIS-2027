@@ -3,3 +3,7 @@ __pycache__/
 .env.*
 *.pyc
 local-working/
+outputs/
+tavily_*.json
+tmp_*.py
+benchmark_models.py

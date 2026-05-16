@@ -8,8 +8,8 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from dotenv import load_dotenv
-from openai import OpenAI
-from _retry import RetryableError, retry
+from openai import OpenAI, RateLimitError, APIConnectionError, APITimeoutError, InternalServerError, AuthenticationError, BadRequestError
+from _retry import RetryableError, NonRetryableError, retry
 from generate_report import esc
 import spacy
 import errant
@@ -23,16 +23,15 @@ CORRECTION_MODEL = "gpt-4o-mini"
 SUMMARY_MODEL = "gpt-4o-mini"
 
 # Force direct OpenAI — the system may have OPENAI_BASE_URL set to OpenRouter
-def _openai_client():
-    return OpenAI(api_key=API_KEY, base_url="https://api.openai.com/v1")
+# Reusable client with SDK retries disabled (we handle retry via _retry decorator)
+_client = OpenAI(api_key=API_KEY, base_url="https://api.openai.com/v1", max_retries=0)
 
 OUTPUTS_DIR = Path("outputs")
 LOCAL_WORKING_DIR = Path("local-working")
 
 TEMPERATURE = 0.1
-DOUBLE_CHECK_TEMP = 0.3
-CORRECTION_TEMPS = [0.1, 0.3, 0.5, 0.7]
-VOTE_THRESHOLD = 3
+CORRECTION_TEMPS = [0.1, 0.5]
+VOTE_THRESHOLD = 2
 MODEL_CONTEXT_LIMIT = 32000
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 45
@@ -41,6 +40,7 @@ JITTER_MAX = 1.5
 MULTI_TOKEN_THRESHOLD = 3
 SUMMARY_TEMPERATURE = 0.8
 MAX_WORKERS = 5
+MAX_OUTPUT_TOKENS = 1024
 
 STUDENTS_PATH = Path("docs/students.txt")
 
@@ -81,7 +81,7 @@ def show_menu(files):
 def call_model(text, temperature=TEMPERATURE):
     est_tokens = len(text) // 4
     if est_tokens > MODEL_CONTEXT_LIMIT:
-        print(f"  Error: text too long (~{est_tokens} tokens, limit {MODEL_CONTEXT_LIMIT})")
+        tqdm.write(f"  Error: text too long (~{est_tokens} tokens, limit {MODEL_CONTEXT_LIMIT})")
         return None
     return _call_api(CORRECTION_PROMPT.format(text=text), temperature)
 
@@ -93,27 +93,38 @@ def call_model_custom(prompt_content, temperature=TEMPERATURE, model=None):
 @retry(max_retries=MAX_RETRIES)
 def _call_api(content, temperature, model=None):
     if not API_KEY:
-        print("  Error: no API key found (set OPENAI_API_KEY in .env)")
+        tqdm.write("  Error: no API key found (set OPENAI_API_KEY in .env)")
         return None
 
     model_name = model if model else CORRECTION_MODEL
-    client = _openai_client()
 
     try:
-        r = client.chat.completions.create(
+        r = _client.chat.completions.create(
             model=model_name,
             temperature=temperature,
             messages=[
                 {"role": "system", "content": content},
             ],
+            max_tokens=MAX_OUTPUT_TOKENS,
             timeout=REQUEST_TIMEOUT,
         )
         result = r.choices[0].message.content
         if result:
             return result.strip()
-        raise ValueError("Empty response")
+        raise RetryableError("Empty response")
+    except (RateLimitError, APIConnectionError, APITimeoutError, InternalServerError):
+        raise RetryableError("API error")
+    except AuthenticationError:
+        tqdm.write("  Error: invalid API key")
+        return None
+    except BadRequestError as e:
+        tqdm.write(f"  Error: bad request — {e}")
+        return None
+    except RetryableError:
+        raise
     except Exception as e:
-        raise RetryableError(str(e))
+        tqdm.write(f"  Unexpected error: {type(e).__name__}: {e}")
+        raise NonRetryableError(str(e))
 
 
 ERRANT_CODE_NAMES = {
@@ -287,7 +298,7 @@ def insert_error_reports(output: dict):
         supabase_url = os.environ.get("SUPABASE_URL")
         supabase_key = os.environ.get("SUPABASE_ESL_KEY")
         if not supabase_url or not supabase_key:
-            print("  Supabase credentials not set — skipping error_reports insert")
+            tqdm.write("  Supabase credentials not set — skipping error_reports insert")
             return
         client = create_client(supabase_url, supabase_key)
         row = {
@@ -309,9 +320,9 @@ def insert_error_reports(output: dict):
             if col:
                 row[col] = e["count"]
         client.table("error_reports").insert(row).execute()
-        print(f"  Inserted into error_reports for {output['student_id']} ({len(errors)} error types)")
+        tqdm.write(f"  Inserted into error_reports for {output['student_id']} ({len(errors)} error types)")
     except Exception as e:
-        print(f"  Warning: could not insert into error_reports: {e}")
+        tqdm.write(f"  Warning: could not insert into error_reports: {e}")
 
 
 def post_classify_other(o_str, c_str):
@@ -400,7 +411,7 @@ def build_corrected_typst(orig_doc, edits):
     return result
 
 
-def intersect_edits(edit_lists, threshold=3):
+def intersect_edits(edit_lists, threshold=2):
     """Edit-level majority voting: return edits appearing in >= threshold of the edit lists."""
     from collections import defaultdict
     counts = defaultdict(int)
@@ -532,7 +543,7 @@ def classify_edits(edits):
 
 
 def process_file(file_path, nlp=None, annotator=None):
-    print(f"\n=== Processing: {file_path.relative_to(OUTPUTS_DIR)} ===")
+    tqdm.write(f"\n=== Processing: {file_path.relative_to(OUTPUTS_DIR)} ===")
     with open(file_path, encoding="utf-8") as f:
         data = json.load(f)
 
@@ -541,7 +552,7 @@ def process_file(file_path, nlp=None, annotator=None):
     word_count = data.get("word_count", 0)
 
     if not original_text:
-        print("  Empty student_text, skipping.")
+        tqdm.write("  Empty student_text, skipping.")
         return None
 
     student_info = lookup_student_info(student_id)
@@ -552,10 +563,10 @@ def process_file(file_path, nlp=None, annotator=None):
     record_id = data.get("record_id")
     submission_date = data.get("submission_date", "")
     topic = data.get("topic", "")
-    print(f"  Student: {student_id}")
-    print(f"  Student info: {student_info}")
+    tqdm.write(f"  Student: {student_id}")
+    tqdm.write(f"  Student info: {student_info}")
     if topic:
-        print(f"  Topic: {topic}")
+        tqdm.write(f"  Topic: {topic}")
 
     if nlp is None:
         nlp = spacy.load("en_core_web_sm")
@@ -567,7 +578,7 @@ def process_file(file_path, nlp=None, annotator=None):
 
     # Multi-pass correction with edit-level majority voting
     temps_str = ", ".join(f"temp={t}" for t in CORRECTION_TEMPS)
-    print(f"  Correcting text ({len(CORRECTION_TEMPS)} passes: {temps_str})...")
+    tqdm.write(f"  Correcting text ({len(CORRECTION_TEMPS)} passes: {temps_str})...")
     results = []
     for temp in CORRECTION_TEMPS:
         results.append(call_model(original_text, temp))
@@ -579,11 +590,11 @@ def process_file(file_path, nlp=None, annotator=None):
             corrected_text = r
             break
     if not corrected_text:
-        print("  All correction passes failed, using original as-is.")
+        tqdm.write("  All correction passes failed, using original as-is.")
         corrected_text = original_text
 
     corrected_text = corrected_text.strip()
-    print(f"  Corrected length: {len(corrected_text)} chars")
+    tqdm.write(f"  Corrected length: {len(corrected_text)} chars")
 
     output = _build_output(student_id, original_text, corrected_text, word_count, student_info, [],
                            {"errors": [], "uncategorised": []}, original_text, 0, [])
@@ -593,7 +604,7 @@ def process_file(file_path, nlp=None, annotator=None):
 
     # Noop check — if text is identical, skip ERRANT
     if original_text.strip() == corrected_text.strip():
-        print("  No corrections needed — text unchanged by model.")
+        tqdm.write("  No corrections needed — text unchanged by model.")
         output["metadata"] = build_metadata([], corrected_text, original_text)
         return _finalize_output(output, file_path)
 
@@ -605,11 +616,11 @@ def process_file(file_path, nlp=None, annotator=None):
         edits = annotator.annotate(orig_doc, cor_doc)
         edit_lists.append(edits)
 
-    total_edit_count = sum(len(el) for el in edit_lists)
-
     # Majority voting: adopt edits that appear in >= VOTE_THRESHOLD passes
     confirmed_edits = intersect_edits(edit_lists, VOTE_THRESHOLD)
-    uncertain_count = total_edit_count - len(confirmed_edits) if edit_lists else 0
+    # Count uncertain: unique edits appearing in fewer than VOTE_THRESHOLD passes
+    all_unique = intersect_edits(edit_lists, threshold=1)
+    uncertain_count = len(all_unique) - len(confirmed_edits) if all_unique else 0
     use_edits = confirmed_edits if confirmed_edits else (edit_lists[0] if edit_lists else [])
 
     cor_doc = annotator.parse(corrected_text)
@@ -663,11 +674,11 @@ def _build_output(student_id, original_text, corrected_text, word_count, student
 def _finalize_output(output, file_path):
     # Save without summary first
     write_output(output, file_path)
-    # Generate summary (calls Mistral at temp 0.7)
-    print("  Generating summary...")
+    # Generate summary
+    tqdm.write("  Generating summary...")
     summary = generate_summary(output)
     output["summary"] = summary or ""
-    print(f"  Summary: {summary[:80] if summary else '(empty)'}...")
+    tqdm.write(f"  Summary: {summary[:80] if summary else '(empty)'}...")
     # Re-write with summary
     write_output(output, file_path)
     # Insert into Supabase
@@ -685,14 +696,14 @@ def write_output(output, file_path):
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
-    print(f"  Saved to: {output_path}")
+    tqdm.write(f"  Saved to: {output_path}")
     tc = sum(e["count"] for e in output["errant_analysis"]["errors"])
-    print(f"  Total corrections: {tc}, rate: {output['error_rate']}%")
-    print(f"  Uncat: {len(output['errant_analysis']['uncategorised'])}")
+    tqdm.write(f"  Total corrections: {tc}, rate: {output['error_rate']}%")
+    tqdm.write(f"  Uncat: {len(output['errant_analysis']['uncategorised'])}")
     if output["metadata"]["identity_check"]:
-        print("  Note: text required no corrections")
+        tqdm.write("  Note: text required no corrections")
     if output["metadata"]["overcorrection_count"] > 0:
-        print(f"  Warning: {output['metadata']['overcorrection_count']} potential overcorrection(s) detected")
+        tqdm.write(f"  Warning: {output['metadata']['overcorrection_count']} potential overcorrection(s) detected")
 
     return output
 
@@ -705,23 +716,21 @@ def main_batch(files):
 
     results = []
     n_workers = min(MAX_WORKERS, len(files))
-    pbar = tqdm(total=len(files), unit="file", position=0)
-    with ThreadPoolExecutor(max_workers=n_workers) as executor:
-        future_to_file = {
-            executor.submit(process_file, f, nlp, annotator): f
-            for f in files
-        }
-        for future in as_completed(future_to_file):
-            f = future_to_file[future]
-            try:
-                r = future.result()
-                if r:
-                    results.append(r)
-            except Exception as e:
-                tqdm.write(f"  Error processing {f.name}: {e}")
-            pbar.update(1)
-
-    pbar.close()
+    with tqdm(total=len(files), unit="file", position=0, desc="Processing files") as pbar, \
+         ThreadPoolExecutor(max_workers=n_workers) as executor:
+            future_to_file = {
+                executor.submit(process_file, f, nlp, annotator): f
+                for f in files
+            }
+            for future in as_completed(future_to_file):
+                f = future_to_file[future]
+                try:
+                    r = future.result()
+                    if r:
+                        results.append(r)
+                except Exception as e:
+                    tqdm.write(f"  Error processing {f.name}: {e}")
+                pbar.update(1)
     tqdm.write(f"\n{'='*50}")
     tqdm.write(f"Done. Processed {len(results)}/{len(files)} files.")
     tc = sum(
