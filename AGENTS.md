@@ -6,7 +6,7 @@ Pipelines student handwriting images through OCR transcription (Gemini via OpenR
 
 ## Shell: Windows PowerShell 5.1
 
-This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for shell-specific syntax requirements — use this as a reference when writing or troubleshooting commands.
+This project runs on Windows PowerShell 5.1.
 
 ## Slash commands
 
@@ -17,6 +17,7 @@ This project runs on Windows PowerShell 5.1. See `.kilo/agent/powershell.md` for
 - `/rename-json-files` — Rename ERRANT output JSONs to student_id.json, validated against Supabase classlist
 - `/review` — Run lint, tests, and quality review of uncommitted changes against project conventions
 - `/local-report` — Generate Typst report booklets from ERRANT analysis with summary, charts, and PDF output
+- `/context7` — Search Context7 for up-to-date library documentation (global skill)
 
 ## Skills
 
@@ -80,7 +81,7 @@ Context7 has Typst indexed (ID: `/typst/typst`). Use Context7 as the first choic
 
 | Item | Path |
 |------|------|
-| Main script | `src/ingest.py`, `src/errant_analysis.py`, `src/supabase_classlist.py`, `src/rename_json_files.py`, `src/add_word_count.py`, `src/generate_report.py` |
+| Main script | `src/ingest.py`, `src/errant_analysis.py`, `src/supabase_classlist.py`, `src/rename_json_files.py`, `src/add_word_count.py`, `src/generate_report.py`, `src/interpret_results.py`, `src/desk_statistics.py` |
 | Tests | `tests/test_ingest.py`, `tests/test_errant.py`, `tests/test_supabase_classlist.py`, `tests/test_rename_json_files.py`, `tests/test_report.py` |
 | Dependencies | `requirements.txt` |
 | Linter | `ruff` (config: `.ruff.toml`) |
@@ -101,6 +102,20 @@ ruff check src/ tests/
 # test
 pytest tests/ -v
 ```
+
+## Data lineage and class-label convention
+
+- Source table: `student_submissions` in Supabase (filter: skill='Writing') (each row = one essay submission)
+- Sampling plan: `sampling_strategy.py` → `local-working/sampling_plan.json`
+- Research prep: `research_prep.py` → `outputs/research/{record_id}.json`
+- ERRANT analysis: `errant_analysis.py` → `local-working/{folder}-{record_id}.json`
+
+**Class-label convention (critical — DO NOT misinterpret):**
+The `class` field in ERRANT output JSONs uses M2/M3 as **enrollment status, not academic level:**
+- **M2** = student_id is in the current `classlists` Supabase table (active, still enrolled)
+- **M3** = student_id is NOT in `classlists` (left the program)
+
+All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the paper classlist. The label reflects enrollment, not which year they're in. This is consistent across all 689 files (zero anomalies).
 
 ## Input/output conventions
 

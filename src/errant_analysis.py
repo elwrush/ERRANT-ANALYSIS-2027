@@ -35,8 +35,6 @@ VOTE_THRESHOLD = 2
 MODEL_CONTEXT_LIMIT = 32000
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 45
-JITTER_MIN = 0.5
-JITTER_MAX = 1.5
 MULTI_TOKEN_THRESHOLD = 3
 SUMMARY_TEMPERATURE = 0.8
 MAX_WORKERS = 5
@@ -326,13 +324,18 @@ def insert_error_reports(output: dict):
 
 
 def post_classify_other(o_str, c_str):
-    if not o_str or not c_str:
-        if not o_str and c_str.strip().lower() in {"the", "a", "an", "some", "any", "this", "that", "these", "those"}:
+    # Strip trailing punctuation so comparisons aren't thrown off by sentence boundaries
+    trailing = ".,;:!?\"'"
+    o_clean = o_str.strip().rstrip(trailing)
+    c_clean = c_str.strip().rstrip(trailing)
+    if not o_clean or not c_clean:
+        # Empty original but model inserted a determiner → missing determiner
+        if not o_clean and c_clean.lower() in {"the", "a", "an", "some", "any", "this", "that", "these", "those"}:
             return "M:DET"
         return "OTHER"
 
-    o_lower = o_str.lower().strip()
-    c_lower = c_str.lower().strip()
+    o_lower = o_clean.lower().strip()
+    c_lower = c_clean.lower().strip()
 
     aux_verbs = {
         "don't", "doesn't", "didn't", "won't", "wouldn't", "couldn't", "shouldn't",
@@ -514,14 +517,121 @@ def build_metadata(edits, corrected_text, original_text):
     }
 
 
+def align_sentences(orig_sentences, cor_sentences):
+    """Align original and corrected sentences.
+
+    Handles differing sentence counts:
+    - When counts match: 1:1 pairing directly
+    - When correction has fewer sentences (merges): best-match with grouping
+    - When correction has more sentences (splits): best-match with grouping
+
+    Uses RapidFuzz token_set_ratio for pairwise similarity.
+    """
+    from rapidfuzz import fuzz
+
+    if not orig_sentences or not cor_sentences:
+        return []
+
+    # Single-sentence cases
+    if len(orig_sentences) == 1 and len(cor_sentences) == 1:
+        return [{"original": orig_sentences[0], "corrected": cor_sentences[0]}]
+
+    # Equal count — pair directly without fuzzy matching
+    if len(orig_sentences) == len(cor_sentences):
+        return [
+            {"original": o, "corrected": c}
+            for o, c in zip(orig_sentences, cor_sentences)
+        ]
+
+    # Build similarity matrix
+    n_orig = len(orig_sentences)
+    n_cor = len(cor_sentences)
+    sim = [[0.0] * n_cor for _ in range(n_orig)]
+    for i, o in enumerate(orig_sentences):
+        for j, c in enumerate(cor_sentences):
+            sim[i][j] = fuzz.token_set_ratio(o, c) / 100.0
+
+    # For each corrected sentence, find the best-matching original
+    # and build groups of consecutive originals
+    best_match = [0] * n_orig  # which corrected each orig maps to
+    for i in range(n_orig):
+        best_j = max(range(n_cor), key=lambda j: sim[i][j])
+        best_match[i] = best_j
+
+    # Group consecutive originals that map to the same corrected
+    groups = []  # list of (orig_start, orig_end, cor_idx)
+    i = 0
+    while i < n_orig:
+        cor_idx = best_match[i]
+        start = i
+        # Extend while consecutive originals map to the same corrected
+        while i < n_orig and best_match[i] == cor_idx:
+            i += 1
+        groups.append((start, i, cor_idx))
+
+    # Handle corrected sentences that no original maps to (splits)
+    mapped_cors = {g[2] for g in groups}
+    for j in range(n_cor):
+        if j not in mapped_cors:
+            # Find which group this split belongs to (nearest earlier orig)
+            # or attach to nearest group
+            best_i = max(range(n_orig), key=lambda i: sim[i][j])
+            for g_idx, (start, end, cor_idx) in enumerate(groups):
+                if start <= best_i < end:
+                    # Merge this corrected into the same group
+                    groups[g_idx] = (start, end, cor_idx, True)  # mark as multi-cor
+                    break
+
+    # Build pairs from groups
+    pairs = []
+    for group in groups:
+        if len(group) == 4:
+            start, end, cor_idx, _ = group
+            # Find ALL corrected sentences that map to this orig range
+            cor_indices = set()
+            for orig_i in range(start, end):
+                for cor_j in range(n_cor):
+                    if sim[orig_i][cor_j] > 0:
+                        cor_indices.add(cor_j)
+            cor_indices = sorted(cor_indices)
+            orig_part = " ".join(orig_sentences[start:end])
+            cor_part = " ".join(cor_sentences[j] for j in cor_indices)
+        else:
+            start, end, cor_idx = group
+            orig_part = " ".join(orig_sentences[start:end])
+            cor_part = cor_sentences[cor_idx]
+
+        pairs.append({"original": orig_part, "corrected": cor_part})
+
+    # If groups resulted in more pairs than corrected sentences,
+    # merge adjacent pairs with the same corrected sentence
+    merged = []
+    for pair in pairs:
+        if merged and merged[-1]["corrected"] == pair["corrected"]:
+            merged[-1]["original"] += " " + pair["original"]
+        else:
+            merged.append(pair)
+    pairs = merged
+
+    return pairs
+
+
 def classify_edits(edits):
     error_groups = {}
     uncategorised = []
+    dropped_edits = {"UNK": 0, "U:SPACE": 0, "UNK_examples": [], "U:SPACE_examples": []}
 
     for e in edits:
         e_type = e.type
         if e_type in ("OTHER", "R:OTHER") and e.o_toks and e.c_toks:
             e_type = post_classify_other(e.o_str, e.c_str)
+        # Track dropped edits explicitly instead of silently skipping
+        if e_type in ("UNK", "U:SPACE"):
+            dropped_edits[e_type] += 1
+            example = f"{str(e.o_str).strip()} -> {str(e.c_str).strip()}"
+            if len(dropped_edits[f"{e_type}_examples"]) < 5:
+                dropped_edits[f"{e_type}_examples"].append(example)
+            continue
         if e_type == "OTHER" or e_type == "UNK":
             if e.o_str.rstrip() == e.c_str.rstrip() and e.o_str.strip():
                 continue
@@ -539,7 +649,7 @@ def classify_edits(edits):
         error_groups[e_type]["count"] += 1
 
     errors_list = sorted(error_groups.values(), key=lambda x: x["count"], reverse=True)
-    return errors_list, uncategorised
+    return errors_list, uncategorised, dropped_edits
 
 
 def process_file(file_path, nlp=None, annotator=None):
@@ -575,6 +685,11 @@ def process_file(file_path, nlp=None, annotator=None):
 
     if annotator is None:
         annotator = errant.load("en")
+
+    # Use annotator.parse() (whitespace-split tokenization) for ERRANT alignment
+    # so both original and corrected use consistent token bounds.
+    # Use nlp() above for sentence extraction only (more accurate boundaries).
+    orig_parse = annotator.parse(original_text)
 
     # Multi-pass correction with edit-level majority voting
     temps_str = ", ".join(f"temp={t}" for t in CORRECTION_TEMPS)
@@ -612,8 +727,8 @@ def process_file(file_path, nlp=None, annotator=None):
     successful_results = [r for r in results if r is not None]
     edit_lists = []
     for res in successful_results:
-        cor_doc = annotator.parse(res) if res else orig_doc
-        edits = annotator.annotate(orig_doc, cor_doc)
+        cor_doc = annotator.parse(res) if res else orig_parse
+        edits = annotator.annotate(orig_parse, cor_doc)
         edit_lists.append(edits)
 
     # Majority voting: adopt edits that appear in >= VOTE_THRESHOLD passes
@@ -626,26 +741,23 @@ def process_file(file_path, nlp=None, annotator=None):
     cor_doc = annotator.parse(corrected_text)
 
     # GAP-4: Pre-split multi-token edits
-    use_edits = pre_split_edits(annotator, use_edits, orig_doc, cor_doc)
+    use_edits = pre_split_edits(annotator, use_edits, orig_parse, cor_doc)
 
     # GAP-1: Overcorrection detection + GAP-5: Metadata
-    errors_list, uncategorised = classify_edits(use_edits)
+    errors_list, uncategorised, dropped_edits = classify_edits(use_edits)
     metadata = build_metadata(use_edits, corrected_text, original_text)
     metadata["uncertain_edit_count"] = uncertain_count if len(successful_results) >= 2 else len(use_edits) // 2
 
-    corrected_typst = build_corrected_typst(orig_doc, use_edits)
+    corrected_typst = build_corrected_typst(orig_parse, use_edits)
 
-    cor_sentences = [sent.text.strip() for sent in cor_doc.sents]
-    max_pairs = min(len(orig_sentences), len(cor_sentences)) if orig_sentences else 0
-    sentence_pairs = []
-    for i in range(max_pairs):
-        sentence_pairs.append({"original": orig_sentences[i], "corrected": cor_sentences[i]})
+    cor_sentences = [sent.text.strip() for sent in nlp(corrected_text).sents]
+    sentence_pairs = align_sentences(orig_sentences, cor_sentences)
 
     correction_count = sum(eg["count"] for eg in errors_list)
     error_rate = round(correction_count / word_count * 100) if word_count > 0 else 0
 
     output = _build_output(student_id, original_text, corrected_text, word_count, student_info,
-                           sentence_pairs, {"errors": errors_list, "uncategorised": uncategorised},
+                           sentence_pairs, {"errors": errors_list, "uncategorised": uncategorised, "dropped_edits": dropped_edits},
                            corrected_typst, error_rate, use_edits)
     output["record_id"] = record_id
     output["submission_date"] = submission_date

@@ -2,18 +2,18 @@
 
 ## 1. Research Context
 
-This document describes the sampling methodology used to select student writing submissions for grammatical error analysis (ERRANT). The corpus consists of handwritten essays transcribed via OCR (Gemini 2.5 Flash Lite) and stored in a Supabase `student_submissions` table. Each row represents a single essay submission by a student and includes a `skill` field identifying the language skill assessed (Writing, Speaking, Reading, Listening, Use of English).
+This document describes the sampling methodology used to select student writing submissions for grammatical error analysis (ERRANT). The corpus consists of handwritten essays transcribed via OCR (Gemini 2.5 Flash Lite) and stored in the Supabase `writing_assessment_cambridge` table. Each row represents a single essay submission by a student and includes fields for CEFR level, exam type, assessment type, and component scores.
 
 This analysis targets only **Writing** submissions. The total corpus contains 978 Writing records contributed by 97 distinct students.
 
 ## 2. Cohort Assignment
 
-Students are assigned to one of two cohorts based on academic year progression. The `classlists` table contains students enrolled in the current academic year, alongside their current class level. The mapping logic follows the school's year-on-year progression:
+Students are assigned to one of two cohorts based on current enrollment status. The `classlists` table contains students currently enrolled in the program. The mapping logic is:
 
-- **M2 cohort**: Students currently enrolled in M3 classes (M3-4A, M3-5A). These students submitted their writing when they were in M2 the previous academic year. Their submissions therefore represent M2-level writing ability.
-- **M3 cohort**: Students who appear in `student_submissions` but are **absent** from the current `classlists`. These students have graduated or left the programme; their submissions represent M3-level writing ability.
+- **M2 label (active cohort)**: Students whose `student_id` appears in the current `classlists` table. Their submissions are labelled "M2" in the analysis data. These students are currently enrolled in M3 classes (M3-4A, M3-5A) but retain the M2 label because they are still in the program.
+- **M3 label (former cohort)**: Students whose `student_id` appears in `writing_assessment_cambridge` but is **absent** from the current `classlists`. These students have left the programme (graduated or withdrawn).
 
-Current M2 students (M2-4A, M2-5A) and current M3-3A students do not appear in the Writing submissions and are excluded from this analysis.
+Current M3-3A students and all current M2 students (M2-4A, M2-5A) do not appear in the Writing submissions and are excluded from this analysis.
 
 ### 2.1 Cohort Sizes
 
@@ -92,7 +92,7 @@ These effective sample sizes remain above the 20–30 student minimum threshold 
 
 **M2 cohort**: **All 36 students (289 records) are included** with no sub-sampling. With 36 students, this is a small population for which sampling would incur information loss disproportionate to any efficiency gain (Cochran 1977 recommends full enumeration when the sampling fraction exceeds 50%).
 
-**M3 cohort**: **36 students are randomly selected** from the 61 available, yielding an estimated ~396 records. The sample size is matched to the M2 cohort count to enable balanced cohort comparison — a design that avoids the statistical power asymmetry of unequal groups (Cohen 1988, 1992).
+**M3 cohort**: **36 students are randomly selected** from the 61 available, yielding an estimated ~396 records. The sample size is matched to the M2 cohort count (36) to enable balanced cohort comparison — a design that avoids the statistical power asymmetry of unequal groups (Cohen 1988, 1992).
 
 ### 5.2 Method
 

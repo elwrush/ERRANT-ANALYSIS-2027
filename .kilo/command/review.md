@@ -32,17 +32,18 @@ Check every changed file against the rules below. List all violations with file 
 ### Python scripts (`src/*.py`)
 
 1. **Secrets** — No hardcoded API keys or secrets. Keys loaded only via `os.environ` / `dotenv`.
-2. **API URL** — Must be `https://openrouter.ai/api/v1/chat/completions`.
+2. **API URL** — Must be `https://api.openai.com/v1` (direct OpenAI, not OpenRouter).
 3. **Model constants** — Must match documented values:
    - Ingestion: `google/gemini-2.5-flash-lite-preview-09-2025`
-   - ERRANT: `mistralai/mistral-small-3.2-24b-instruct`
-4. **Retry/backoff** — Exponential delay on errors, max retries >= 3.
-5. **Jitter** — Random delay between API calls in 0.5–2.0s range.
-6. **ERRANT temperatures** — Primary pass at 0.1, double-check pass at 0.3.
+   - ERRANT correction: `gpt-4o-mini`
+   - ERRANT summary: `gpt-4o-mini`
+4. **Retry/backoff** — Exponential delay (`2^n` + jitter, capped 60s) on retries, max retries >= 3.
+5. **Jitter** — Added to retry delays; not required between normal API calls.
+6. **ERRANT temperatures** — Two correction passes at 0.1 and 0.5 (both must agree via edit-level majority voting).
 7. **Transcription prompt** — Must enforce verbatim transcription (no corrections, `<br>` for breaks, skip crossed-out text, resolve carats to natural flow).
 8. **Correction prompt** — Must enforce minimal change (grammar/spelling only, no rephrase, no style changes).
 9. **`post_classify_other`** — Heuristic chain (aux verbs → R:VERB:TENSE, Levenshtein > 0.55 → R:SPELL, case-only → R:ORTH, shared prefix → R:MORPH, articles → R:DET, preps → R:PREP) must be preserved.
-10. **Double-check pass** — Both correction calls (temp 0.1 and 0.3) must exist; edit intersection logic must be present.
+10. **Majority voting** — Both correction passes (temps 0.1, 0.5) must exist; edit intersection with `VOTE_THRESHOLD=2` must be present.
 11. **Imports** — Every non-stdlib import must exist in `requirements.txt`.
 12. **No dangerous patterns** — No `eval()`, `exec()`, `subprocess` with `shell=True` unless explicitly justified.
 

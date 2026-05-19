@@ -24,7 +24,6 @@ Set environment variables:
 
 | Variable | Value |
 |----------|-------|
-| `OPENROUTER_API_KEY` | OpenRouter API key |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_ESL_KEY` | Service role key |
 | `SUPABASE_DB_URL` | Direct DB connection string (for `setup_error_analysis.py` only) |

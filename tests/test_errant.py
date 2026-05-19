@@ -118,6 +118,154 @@ class TestPostClassification:
         assert result == "R:PREP"
 
 
+class TestAlignSentences:
+    """Test the sentence alignment function."""
+
+    def test_both_single_sentence(self):
+        from errant_analysis import align_sentences
+        result = align_sentences(["Hello world."], ["Hello world."])
+        assert len(result) == 1
+        assert result[0]["original"] == "Hello world."
+        assert result[0]["corrected"] == "Hello world."
+
+    def test_equal_count_identity(self):
+        from errant_analysis import align_sentences
+        result = align_sentences(
+            ["First sentence.", "Second sentence.", "Third sentence."],
+            ["First sentence.", "Second sentence.", "Third sentence."],
+        )
+        assert len(result) == 3
+        assert result[0]["original"] == "First sentence."
+        assert result[1]["corrected"] == "Second sentence."
+
+    def test_equal_count_with_changes(self):
+        from errant_analysis import align_sentences
+        result = align_sentences(
+            ["He go to store.", "She like apples."],
+            ["He goes to the store.", "She likes apples."],
+        )
+        assert len(result) == 2
+        # Both sides at least contain the same words
+        assert "go" in result[0]["original"]
+        assert "goes" in result[0]["corrected"]
+        assert "like" in result[1]["original"]
+        assert "likes" in result[1]["corrected"]
+
+    def test_fewer_corrected_sentences(self):
+        """Correction merged two sentences into one."""
+        from errant_analysis import align_sentences
+        result = align_sentences(
+            ["First part.", "Second part. This is longer."],
+            ["First part. Second part. This is longer."],
+        )
+        # Both originals should map to the single corrected
+        assert len(result) == 1
+        assert "First part" in result[0]["original"]
+        assert "Second part" in result[0]["original"]
+        assert "Second part" in result[0]["corrected"]
+
+    def test_more_corrected_sentences(self):
+        """Correction split one sentence into two (less common but possible)."""
+        from errant_analysis import align_sentences
+        result = align_sentences(
+            ["This is a long sentence that was split."],
+            ["This is a long sentence.", "That was split."],
+        )
+        assert len(result) == 1
+        assert "This is a long sentence that was split" in result[0]["original"]
+        assert "This is a long sentence" in result[0]["corrected"]
+        assert "That was split" in result[0]["corrected"]
+
+    def test_empty_original(self):
+        from errant_analysis import align_sentences
+        result = align_sentences([], ["Some text."])
+        assert result == []
+
+    def test_empty_corrected(self):
+        from errant_analysis import align_sentences
+        result = align_sentences(["Some text."], [])
+        assert result == []
+
+    def test_single_to_multi_merge(self):
+        """Multiple originals map to fewer corrected."""
+        from errant_analysis import align_sentences
+        result = align_sentences(
+            ["Sentence A.", "Sentence B.", "Sentence C."],
+            ["Sentence A. Sentence B. Sentence C."],
+        )
+        assert len(result) == 1
+        assert "Sentence A" in result[0]["original"]
+        assert "Sentence C" in result[0]["original"]
+        # Corrected should contain all three
+        assert result[0]["corrected"].count("Sentence") == 3
+
+    def test_typst_example(self):
+        """Realistic multi-sentence alignment from sampled ERRANT data."""
+        from errant_analysis import align_sentences
+        result = align_sentences(
+            ["Makha Bucha day is the day that Prince Sittadta enlightmented in the past.",
+             "Every July 10th, we celebrate it by go to the temple, where near our house."],
+            ["Makha Bucha day is the day that Prince Sittadta enlightened in the past. "
+             "Every July 10th, we celebrate it by going to the temple, which is near our house."],
+        )
+        # The correction merged two sentences into one
+        assert len(result) == 1 or len(result) == 2
+        # The key test: the original and corrected texts should not be scrambled
+        if len(result) == 1:
+            combined_orig = result[0]["original"]
+            combined_cor = result[0]["corrected"]
+            assert "enlightmented" in combined_orig or "enlightened" in combined_orig
+            assert "enlightened" in combined_cor
+        elif len(result) == 2:
+            assert "enlightented" in result[0]["original"] or "enlightened" in result[0]["original"]
+            assert "enlightened" in result[0]["corrected"] or "enlightened" in result[1]["corrected"]
+
+
+class TestClassifyEdits:
+    """Test the classify_edits function, especially dropped-edit tracking."""
+
+    def test_basic_classification(self):
+        from errant_analysis import classify_edits, _make_edit
+        edits = [
+            _make_edit(0, 1, [], "go", 0, 1, [], "goes", "R:VERB:SVA"),
+            _make_edit(2, 3, [], "recieve", 2, 3, [], "receive", "R:SPELL"),
+        ]
+        errors, uncat, dropped = classify_edits(edits)
+        assert len(errors) == 2
+        assert dropped["UNK"] == 0
+        assert dropped["U:SPACE"] == 0
+
+    def test_unk_tracked_not_silently_dropped(self):
+        from errant_analysis import classify_edits, _make_edit
+        edits = [
+            _make_edit(0, 1, [], "go", 0, 1, [], "goes", "R:VERB:SVA"),
+            _make_edit(2, 4, [], "something weird", 2, 4, [], "completely different", "UNK"),
+            _make_edit(5, 6, [], " ", 5, 6, [], "", "U:SPACE"),
+        ]
+        errors, uncat, dropped = classify_edits(edits)
+        assert len(errors) == 1  # only the SVA edit survived
+        assert dropped["UNK"] == 1
+        assert dropped["U:SPACE"] == 1
+        assert len(dropped["UNK_examples"]) == 1
+        assert "something weird" in dropped["UNK_examples"][0]
+
+    def test_ukn_uses_short_example_list(self):
+        """UNK_examples should cap at 5 to keep output size manageable."""
+        from errant_analysis import classify_edits, _make_edit
+        edits = [_make_edit(i, i+1, [], f"unk_{i}", i, i+1, [], "x", "UNK") for i in range(10)]
+        errors, uncat, dropped = classify_edits(edits)
+        assert dropped["UNK"] == 10
+        assert len(dropped["UNK_examples"]) == 5
+
+    def test_no_edits(self):
+        from errant_analysis import classify_edits
+        errors, uncat, dropped = classify_edits([])
+        assert errors == []
+        assert uncat == []
+        assert dropped["UNK"] == 0
+        assert dropped["U:SPACE"] == 0
+
+
 class TestMetadata:
     """Test the build_metadata function."""
 

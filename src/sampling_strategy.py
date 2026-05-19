@@ -46,12 +46,12 @@ cls = client.table("classlists").select("student_id").execute()
 classlist_ids = {r["student_id"] for r in cls.data}
 
 # ── Step 2: Get all writing records ────────────────────────────────────
-# Fetch in batches if needed (table has 978 rows, under default 1000 limit)
-all_writing = client.table("student_submissions").select("*").ilike("skill", "Writing").execute()
+# Fetch in batches if needed (table has ~978 rows, under default 1000 limit)
+all_writing = client.table("writing_assessment_cambridge").select("*").execute()
 
 # Group records by student and assign cohort
-m2_records = []   # students currently in classlists (wrote when M2)
-m3_records = []   # students NOT in classlists (wrote when M3)
+m2_records = []   # students currently in classlists (active — labelled M2)
+m3_records = []   # students NOT in classlists (left program — labelled M3)
 m2_students = defaultdict(list)
 m3_students = defaultdict(list)
 
@@ -111,8 +111,8 @@ OUTPUT.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-
 print("=== Sampling Strategy ===")
 print()
 print("Cohort assignment:")
-print("  M2 = in current classlists (wrote when M2)")
-print("  M3 = NOT in current classlists (graduated, wrote when M3)")
+print("  M2 = student_id in current classlists (active — labelled M2)")
+print("  M3 = student_id NOT in current classlists (left program — labelled M3)")
 print()
 print(f"{'':>6} | {'Students':>10} | {'Records':>10} | {'Sampled':>10} | {'Sampled':>10}")
 print(f"{'':>6} | {'(total)':>10} | {'(total)':>10} | {'students':>10} | {'records':>10}")

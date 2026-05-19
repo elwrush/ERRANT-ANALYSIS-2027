@@ -24,10 +24,11 @@ for c, n in sorted(classes.items()):
     print(f"  {c}: {n}")
 print(f"  total: {len(classlist)}")
 
-# 2. Get all distinct student_ids in student_submissions with skill=Writing
-subs = client.table("student_submissions").select("student_id", count="exact").ilike("skill", "Writing").execute()
+# 2. Get all distinct student_ids in writing_assessment_cambridge
+subs = client.table("writing_assessment_cambridge").select("student_id", count="exact").execute()
 sub_ids = {r["student_id"] for r in subs.data}
-print("\n=== student_submissions (skill=Writing) ===")
+
+print("\n=== writing_assessment_cambridge ===")
 print(f"  distinct students: {len(sub_ids)}")
 print(f"  total rows: {subs.count}")
 

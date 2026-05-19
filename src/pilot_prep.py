@@ -13,7 +13,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 load_dotenv()
 c = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ESL_KEY"])
 
-r = c.table("student_submissions").select("*").eq("student_id", "29579").ilike("skill", "Writing").order("submission_date").execute()
+r = c.table("writing_assessment_cambridge").select("*").eq("student_id", "29579").order("submission_date").execute()
 records = r.data
 
 print(f"Found {len(records)} records for student 29579")
