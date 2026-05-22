@@ -47,13 +47,16 @@ Table setup: `python src/setup_error_analysis.py` (run once after creating the t
 - PDF: `PDF/{folder}/{dd-mm-yy}-{class}-combined.pdf`
 - Charts: `outputs/charts/{student_id}.png` (one per student)
 
-## Page structure (4 pages per student)
+## Page structure
+
+Each student occupies a multiple of 4 pages for booklet printing:
 
 | Page | Content |
 |------|---------|
-| 1 | Masthead grid (ACT logo, Mathayom Program, Cambridge logo), separator line, title "Writing Accuracy Feedback Report", subhead `{name} - {id} - {class}`, personalised greeting (*Dear {name},*), AI-generated summary with guidance ("It is better to write..."), target-rate boilerplate, error-rate line chart with CEFR target line + gray shading |
-| 2 | Your Writing with Corrections (underlined corrections, subhead "I scanned your writing...") |
-| 3-4 | Blank pages (4-page minimum per student) |
+| 1 | Masthead grid (ACT logo, Mathayom Program, Cambridge logo), separator line, title "Writing Accuracy Feedback Report", subhead `{name} - {id} - {class}`, personalised greeting (*Dear {name},*), AI-generated summary with guidance, target-rate boilerplate, error-rate line chart with CEFR target line + gray shading |
+| 2+ | **Your Writing with Corrections** — corrected text with `#underline[]` markup showing all corrections, subhead left-aligned ("I scanned your writing for errors...") |
+| (same page) | **Your Original Writing (Uncorrected)** — verbatim student text, no page break between corrected and original sections (separated by `#v(2em)`) |
+| + | Blank pages to pad to the next multiple of 4 (via pad-to-four logic) |
 
 ## Pad-to-four (critical — do not modify without research)
 
@@ -91,13 +94,18 @@ Each student must occupy exactly 4 pages. Blank pages are appended using Typst's
 
 4. **`#[]` in markup is an array**: In `[#[] <label>]`, the `#` enters code mode and `[]` is an empty array. This may serialize as literal `[]`. Use `#box(width: 0pt) <label>` instead.
 
-## Paragraph breaks in corrected text
+## Paragraph breaks
 
 **Critical rule**: In Typst markup, a single `\n` is whitespace (collapsed to space). Only `\n\n` (blank line) creates a paragraph break.
 
-The ERRANT `corrected_typst` field (in `errant_analysis.py:build_corrected_typst()`) uses single `\n` between paragraphs. In `generate_report.py:build_student_block()`, the newlines are doubled:
+The ERRANT `corrected_typst` field uses single `\n` between paragraphs. In `build_student_block()`, the newlines are doubled:
 ```python
 marked = markup.replace("\n", "\n\n")
+```
+
+The original uncorrected text (`original_text` from the ERRANT JSON) is plain text, not Typst markup. It is escaped via `esc()` before being embedded, and `\n` is doubled to `\n\n` for Typst paragraph breaks:
+```python
+orig_escaped = esc(orig).replace("\n", "\n\n")
 ```
 
 **Do NOT**:

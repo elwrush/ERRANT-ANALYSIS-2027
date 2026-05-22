@@ -9,9 +9,7 @@ load_dotenv()
 SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL")
 
 NEW_COLUMNS = [
-    "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS submission_date TIMESTAMPTZ",
-    "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS topic TEXT",
-    "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS record_id INTEGER",
+    "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS academic_year INTEGER DEFAULT 2007",
 ]
 
 COLUMNS_SQL = [

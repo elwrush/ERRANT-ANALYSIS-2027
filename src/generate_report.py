@@ -176,6 +176,10 @@ def build_student_block(student, idx):
     markup = student.get("corrected_typst", student.get("corrected_with_markup", ""))
     marked = markup.replace("\n", "\n\n")
 
+    # Original uncorrected text
+    orig = student.get("original_text", "")
+    orig_escaped = esc(orig).replace("\n", "\n\n")
+
     lines = []
 
     # Masthead grid with logos and separator line
@@ -220,12 +224,21 @@ def build_student_block(student, idx):
     lines.append("#pagebreak()")
     lines.append("")
     lines.append('#align(center, text(size: 16pt, weight: "bold")[Your Writing with Corrections])')
-    lines.append('#align(center, text(size: 11pt)[I scanned your writing for errors and underlined the corrections. Carefully comparing the original and corrected versions will help you become more aware of common mistakes\\')
-    lines.append('and improve your writing skills.])')
+    lines.append('#text(size: 11pt)[I scanned your writing for errors and underlined the corrections below. Carefully comparing the corrected and original versions will help you become more aware of common mistakes\\')
+    lines.append('and improve your writing skills.]')
     lines.append("")
     lines.append("#v(0.5em)")
     lines.append("")
     lines.append(marked)
+    lines.append("")
+    lines.append("#v(2em)")
+    lines.append("")
+    lines.append('#align(center, text(size: 16pt, weight: "bold")[Your Original Writing (Uncorrected)])')
+    lines.append('#align(center, text(size: 11pt)[Below is your original writing exactly as you submitted it, before any corrections were applied. Compare it with the corrected version above.])')
+    lines.append("")
+    lines.append("#v(0.5em)")
+    lines.append("")
+    lines.append(orig_escaped)
     lines.append("")
     # Pad to exactly 4 pages: zero-width invisible anchor + blank pages
     lines.append(f'#box(width: 0pt) <pad-anchor-{idx}>')
@@ -357,7 +370,7 @@ def main():
 
     files = sorted(LOCAL_WORKING_DIR.rglob("*.json"))
     if folder_name:
-        files = [f for f in files if f.stem.startswith(folder_name)]
+        files = [f for f in files if f.stem.startswith(folder_name + "-")]
 
     if not files:
         print(f"No ERRANT output files found in {LOCAL_WORKING_DIR}/")

@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from PIL import Image
 
@@ -14,33 +13,12 @@ TEST_DIR = Path("inputs/test_set")
 
 def setup_module():
     TEST_DIR.mkdir(parents=True, exist_ok=True)
+    # Clean stale files from previous test runs
+    for f in TEST_DIR.iterdir():
+        f.unlink()
     img = Image.new("RGB", (2000, 1500), "white")
-    for name in ["12345_1.jpg", "12345_2.jpg", "67890_1.jpg"]:
+    for name in ["img-0003.jpg", "img-0002.jpg", "img-0001.jpg"]:
         img.save(TEST_DIR / name, "JPEG", quality=95)
-
-
-class TestFilenameGrouping:
-    pattern = re.compile(r"^(\d+)_(\d+)")
-
-    def test_standard_name(self):
-        m = self.pattern.match("12345_1")
-        assert m is not None
-        assert m.groups() == ("12345", "1")
-
-    def test_multi_digit_id(self):
-        m = self.pattern.match("98765_12")
-        assert m is not None
-        assert m.groups() == ("98765", "12")
-
-    def test_leading_zeros(self):
-        m = self.pattern.match("00123_1")
-        assert m is not None
-        assert m.groups() == ("00123", "1")
-
-    def test_non_matching(self):
-        assert self.pattern.match("foo_bar") is None
-        assert self.pattern.match("notes") is None
-        assert self.pattern.match("12345.jpg") is None
 
 
 class TestJsonParsing:
@@ -69,12 +47,12 @@ class TestJsonParsing:
 
 class TestPreprocessing:
     def test_data_url_format(self):
-        url = preprocess_image(str(TEST_DIR / "12345_1.jpg"))
+        url = preprocess_image(str(TEST_DIR / "img-0001.jpg"))
         assert url.startswith("data:image/jpeg;base64,")
         assert len(url) > 100
 
     def test_image_dimensions(self):
-        url = preprocess_image(str(TEST_DIR / "12345_1.jpg"))
+        url = preprocess_image(str(TEST_DIR / "img-0001.jpg"))
         b64 = url.split(",", 1)[1]
         import base64
         import io
@@ -93,26 +71,22 @@ class TestPreprocessing:
 class TestGrouping:
     def test_single_page(self):
         groups = group_images(TEST_DIR, 1)
-        assert len(groups) == 2
-        ids = [g["student_id"] for g in groups]
-        assert "12345" in ids
-        assert "67890" in ids
+        assert len(groups) == 3
+        for g in groups:
+            assert len(g["pages"]) == 1
 
     def test_multi_page(self):
         groups = group_images(TEST_DIR, 2)
         assert len(groups) == 2
-        for g in groups:
-            if g["student_id"] == "12345":
-                assert len(g["pages"]) == 2
-            elif g["student_id"] == "67890":
-                assert len(g["pages"]) == 1
+        assert len(groups[0]["pages"]) == 2
+        assert len(groups[1]["pages"]) == 1
 
     def test_page_order(self):
         groups = group_images(TEST_DIR, 2)
         for g in groups:
             pages = g["pages"]
-            page_nums = [int(p.stem.split("_")[1]) for p in pages]
-            assert page_nums == sorted(page_nums)
+            names = [p.name for p in pages]
+            assert names == sorted(names)
 
     def test_empty_folder(self, tmp_path):
         groups = group_images(tmp_path, 1)

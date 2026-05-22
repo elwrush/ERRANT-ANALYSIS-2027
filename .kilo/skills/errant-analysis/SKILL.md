@@ -105,6 +105,8 @@ Sentence pairs (used in the Typst report) are aligned by **token set similarity*
 
 Threshold: ≥0.30. Unmatched sentences are merged into adjacent pairs.
 
+**Edge case — corrected sentence splits**: When the correction splits an original sentence (more corrected sentences than originals), the alignment function marks grouped pairs with a 4-tuple `(start, end, cor_idx, True)`. The iteration code uses `group_val[:3]` to safely unpack both 3-tuple and 4-tuple entries.
+
 ## Post-Classification Heuristic (`post_classify_other`)
 
 ERRANT's raw classifier leaves some edits as `OTHER` or `R:OTHER`. The pipeline reclassifies these through a priority-ordered heuristic chain:
@@ -190,12 +192,18 @@ Saved to `local-working/{folder}-{record_id}.json`:
 
 ---
 
+## Student Info Lookup
+
+Student name and class are looked up from the Supabase `classlists` table using the student ID. If a student is not found, the analysis continues and the output JSON will have empty `name` and `class` fields.
+
+**Missing-student reporting**: At the end of a batch run, any student IDs not found in the classlist are listed with their JSON file path AND the original source image filenames (from the `source_images` field in the ingestion JSON). The list is also saved to `local-working/missing_student_ids.txt` so you know exactly which source images need manual `name`/`class` fields added or which IDs need to be added to the Supabase `classlists` table.
+
 ## Supabase Upload
 
 After ERRANT analysis completes, the pipeline inserts a row into the `error_reports` Supabase table with:
 
-- **Base fields**: `student_id`, `class`, `name`, `error_percent`, `summary`, `word_count`
-- **Record metadata**: `record_id`, `submission_date`, `topic`
+- **Base fields**: `student_id`, `class`, `name`, `error_percent`, `summary`, `word_count`, `academic_year` (default 2007)
+- **Record metadata**: *(redundant with `student_submissions` — not written; use `record_id` from that table for joins)*
 - **45 error code columns** (`r_spell`, `r_det`, `r_verb_tense`, `m_noun`, `u_punct`, etc.) — one per ERRANT code, populated with the count for that record (0 if none)
 
 The code-to-column mapping is defined in `ERRANT_CODE_TO_COLUMN` (line ~184 of `src/errant_analysis.py`). Colon-delimited codes like `R:NOUN:NUM` are sanitized to `r_noun_num`.

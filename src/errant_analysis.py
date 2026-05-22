@@ -3,7 +3,6 @@ import os
 import re
 import sys
 import json
-import csv
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -39,8 +38,7 @@ MULTI_TOKEN_THRESHOLD = 3
 SUMMARY_TEMPERATURE = 0.8
 MAX_WORKERS = 5
 MAX_OUTPUT_TOKENS = 1024
-
-STUDENTS_PATH = Path("docs/students.txt")
+MISSING_STUDENT_IDS: dict[str, list[str]] = {}
 
 
 CORRECTION_PROMPT = """You are a grammatical error correction tool. Your task is to correct the grammaticality and spelling in the following text written by a student learning English. Make the smallest possible change in order to make the text grammatically correct. Change as few words as possible. Do not rephrase parts that are already grammatical. Do not change the meaning by adding or removing information. If the text is already grammatically correct, output the original text without changing anything. Return only the corrected plain text and nothing else.
@@ -240,15 +238,23 @@ Output ONLY the feedback paragraph above. Nothing before or after."""
 
 
 def lookup_student_info(student_id: str) -> dict:
-    if not STUDENTS_PATH.exists():
+    try:
+        from supabase import create_client
+        supabase_url = os.environ.get("SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_ESL_KEY")
+        if not supabase_url or not supabase_key:
+            tqdm.write("  Supabase credentials not set — skipping classlist lookup")
+            return {}
+        client = create_client(supabase_url, supabase_key)
+        result = client.table("classlists").select("student_id, name, class").eq("student_id", student_id).execute()
+        if result.data and len(result.data) > 0:
+            row = result.data[0]
+            return {"class": row.get("class", ""), "name": row.get("name", "")}
+        tqdm.write(f"  Warning: student {student_id} not found in Supabase classlists")
         return {}
-    with open(STUDENTS_PATH, encoding="utf-8") as f:
-        reader = csv.reader(f, delimiter="\t")
-        next(reader, None)
-        for cols in reader:
-            if len(cols) >= 3 and cols[1].strip() == student_id:
-                return {"class": cols[0].strip(), "name": cols[2].strip()}
-    return {}
+    except Exception as e:
+        tqdm.write(f"  Warning: could not query Supabase classlist: {e}")
+        return {}
 
 
 def _sanitize_unicode(text):
@@ -306,9 +312,7 @@ def insert_error_reports(output: dict):
             "error_percent": output["error_rate"],
             "summary": output.get("summary", ""),
             "word_count": output.get("word_count", 0),
-            "record_id": output.get("record_id"),
-            "submission_date": output.get("submission_date"),
-            "topic": output.get("topic", ""),
+            "academic_year": 2007,
         }
         for col in ERROR_CODE_COLUMNS:
             row[col] = 0
@@ -576,7 +580,8 @@ def align_sentences(orig_sentences, cor_sentences):
             # Find which group this split belongs to (nearest earlier orig)
             # or attach to nearest group
             best_i = max(range(n_orig), key=lambda i: sim[i][j])
-            for g_idx, (start, end, cor_idx) in enumerate(groups):
+            for g_idx, group_val in enumerate(groups):
+                start, end, cor_idx = group_val[:3]
                 if start <= best_i < end:
                     # Merge this corrected into the same group
                     groups[g_idx] = (start, end, cor_idx, True)  # mark as multi-cor
@@ -666,6 +671,13 @@ def process_file(file_path, nlp=None, annotator=None):
         return None
 
     student_info = lookup_student_info(student_id)
+    if not student_info:
+        source_images = data.get("source_images", [])
+        entry = str(file_path)
+        if source_images:
+            entry += "  (source: " + ", ".join(source_images) + ")"
+        MISSING_STUDENT_IDS.setdefault(student_id, []).append(entry)
+        tqdm.write(f"  No classlist entry for {student_id} — name and class fields will be empty")
     if data.get("name"):
         student_info["name"] = data["name"]
     if data.get("class"):
@@ -850,6 +862,20 @@ def main_batch(files):
         for r in results
     )
     print(f"Total errors detected: {tc}")
+    if MISSING_STUDENT_IDS:
+        missing_file = LOCAL_WORKING_DIR / "missing_student_ids.txt"
+        lines = []
+        for sid in sorted(MISSING_STUDENT_IDS):
+            for fp in MISSING_STUDENT_IDS[sid]:
+                lines.append(f"{sid} -> {fp}")
+        missing_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"\n  {len(MISSING_STUDENT_IDS)} student(s) NOT found in Supabase classlist:")
+        for sid in sorted(MISSING_STUDENT_IDS):
+            print(f"    {sid}:")
+            for fp in MISSING_STUDENT_IDS[sid]:
+                print(f"      - {fp}")
+        print(f"  Details saved to: {missing_file}")
+        print("  Manually add these to Supabase classlists or update the JSON files with 'class' and 'name' fields.")
     print(f"Output: {LOCAL_WORKING_DIR}/")
     print(f"{'='*50}")
 

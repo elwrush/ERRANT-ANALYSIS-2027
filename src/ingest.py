@@ -39,13 +39,16 @@ SYSTEM_PROMPT = """You are a handwriting transcription tool. Your task is to tra
 Rules:
 1. Extract the 5-digit student ID from the ID field on the page.
 2. Transcribe the essay text verbatim.
-3. Insert a newline (\\n) ONLY where the writer intentionally began a new paragraph — indicated by indentation, a blank line, or a change in topic. Do NOT insert a newline at the end of every handwritten line; those are just page-edge line wraps and should flow continuously. A letter's salutation ("Dear X,") and closing ("Sincerely," / "See you soon!") are distinct paragraphs; separate them with \\n.
-4. NEVER wrap lines at a fixed character width. Each paragraph should read as one continuous line in the output, with no newlines except at actual paragraph boundaries.
+3. CRITICAL: Insert \\n ONLY at paragraph boundaries. NEVER insert \\n at handwritten line endings. A handwritten line ending is just a page-width wrap, not a paragraph break. The entire page should be transcribed as a single flowing block with \\n only where the writer intended a new paragraph (indentation, blank line, topic change). A letter's salutation ("Dear X,") and closing ("Sincerely," / "See you soon!") are distinct paragraphs; separate them with \\n.
+4. NEVER wrap lines at a fixed character width. Each paragraph reads as one continuous line with no \\n except at paragraph boundaries. If the output has a \\n at every handwritten line, you are doing it WRONG.
 5. Do NOT render crossed-out or deleted text. Skip it entirely.
-6. If the writer used carats (^) or other insertion symbols, insert those words at their intended position so the natural flow of the passage is retained.
+6. Do NOT render any drawings, illustrations, doodles, emoji, or decorations (e.g. smiley faces, hearts, stars, apples, flowers). Skip them entirely. They are not part of the written text.
+7. If the writer used carats (^) or other insertion symbols, insert those words at their intended position so the natural flow of the passage is retained.
 
 Return ONLY a valid JSON object with exactly these keys:
-{"student_id": "5-digit number", "student_text": "the transcribed text with \\n at paragraph boundaries"}
+{"student_id": "5-digit number", "student_text": "the transcribed text with \\n ONLY at paragraph boundaries"}
+
+REMEMBER: \\n must ONLY appear at paragraph boundaries (indentation, blank line, topic change). Never at handwritten line wraps. Every handwritten line ending should flow into the next word without \\n.
 
 No markdown, no code fences, no explanation — raw JSON only."""
 
@@ -84,38 +87,25 @@ def ask_page_count():
 
 
 def group_images(folder, pages_per_essay):
-    pattern = re.compile(r"^(\d+)_(\d+)")
-    images = []
-    orphans = []
-    auto_id_counter = 0
-    for f in sorted(folder.iterdir()):
-        if f.suffix.lower() in (".jpg", ".jpeg", ".png"):
-            m = pattern.match(f.stem)
-            if m:
-                student_id = m.group(1)
-                page_num = int(m.group(2))
-                images.append((student_id, page_num, f))
-            else:
-                auto_id_counter += 1
-                sid = f"auto-{auto_id_counter:04d}"
-                orphans.append({"student_id": sid, "pages": [f]})
+    """Group images sequentially into essays of `pages_per_essay` pages each.
 
-    groups = {}
-    for student_id, page_num, path in images:
-        groups.setdefault(student_id, []).append((page_num, path))
-    for sid in groups:
-        groups[sid].sort(key=lambda x: x[0])
+    All image files in the folder are sorted alphabetically and grouped
+    into sequential chunks. The student ID is extracted by the vision model
+    from the page image, not from the filename.
+    """
+    image_files = sorted([
+        f for f in folder.iterdir()
+        if f.suffix.lower() in (".jpg", ".jpeg", ".png")
+    ])
 
     result = []
-    for student_id, pages in groups.items():
-        if len(pages) < pages_per_essay:
-            print(f"  Note: student {student_id} has {len(pages)} pages, expected {pages_per_essay}. Processing anyway.")
-        result.append({"student_id": student_id, "pages": [p[1] for p in pages]})
-    result.sort(key=lambda x: x["student_id"])
+    for i in range(0, len(image_files), pages_per_essay):
+        chunk = image_files[i:i + pages_per_essay]
+        temp_id = f"essay-{(i // pages_per_essay) + 1:04d}"
+        result.append({"student_id": temp_id, "pages": chunk})
+        if len(chunk) < pages_per_essay:
+            print(f"  Note: final group has {len(chunk)} page(s), expected {pages_per_essay}")
 
-    result.extend(orphans)
-    for o in orphans:
-        print(f"  Assigned auto-ID {o['student_id']} for {o['pages'][0].name}")
     return result
 
 
@@ -227,6 +217,8 @@ def process_student_group(group, folder_name):
 
         sid = result.get("student_id", "").strip()
         text = result.get("student_text", "").strip()
+        # Squash any newlines the model inserted at line-wrap positions
+        text = " ".join(text.split())
 
         if idx == 1:
             extracted_id = sid if len(sid) == 5 else None
@@ -244,10 +236,14 @@ def process_student_group(group, folder_name):
         print(f"  No text transcribed for {student_id}, skipping.")
         return None
 
-    combined_text = "\n".join(page_texts)
+    combined_text = " ".join(page_texts)
     final_id = extracted_id or student_id
 
-    output = {"student_id": final_id, "student_text": combined_text}
+    output = {
+        "student_id": final_id,
+        "student_text": combined_text,
+        "source_images": [p.name for p in page_paths],
+    }
 
     out_dir = OUTPUTS_DIR / folder_name
     out_dir.mkdir(parents=True, exist_ok=True)
