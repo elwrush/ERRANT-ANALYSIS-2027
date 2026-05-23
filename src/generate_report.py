@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Generate Typst report booklets from ERRANT analysis outputs."""
 import os
 import re
@@ -149,6 +150,75 @@ def esc(text):
     return text
 
 
+def esc_typst_markup(text):
+    """Escape text that already contains Typst commands like #underline[...].
+    Only sanitize Unicode — leave # [ ] escaped characters intact for Typst compilation.
+    Guard against rare cases where student text contains Typst-special characters."""
+    text = str(text)
+    text = _sanitize_unicode(text)
+    # Only escape backslash and dollar — other Typst special chars (#[]{~}*)
+    # are handled by the LLM producing valid markup, and are vanishingly rare
+    # in Thai EFL student writing.
+    text = text.replace("\\", "\\\\")
+    text = text.replace("$", "\\$")
+    return text
+
+
+def _format_summary_paragraph(summary_text):
+    """Convert analysis summary into displayable form.
+    
+    Two formats:
+    1. Old ERRANT format: numbered items like "1. *Problems with verb tense...*"
+       — displayed as-is with Typst formatting
+    2. New flat format: 3 bullet points — converted to coherent paragraph
+    """
+    # Check if summary is already formatted with numbered items (old ERRANT style)
+    if re.search(r'^\d+\.\s+\*', summary_text, re.MULTILINE):
+        return summary_text  # Already well-formatted, display as-is
+    
+    points = [p.strip() for p in summary_text.split('\n') if p.strip()]
+    if not points:
+        return "Continue practicing your writing skills regularly."
+    
+    # Strip leading action verbs like "Work on", "Improve", "Expand", "Focus on", "Practice"
+    LEADING_VERBS = r'^(Work on|Improve|Expand|Focus on|Practice|Review|Study|Try to|Remember to)\s+'
+    cleaned = []
+    for p in points:
+        p_clean = re.sub(LEADING_VERBS, '', p, flags=re.IGNORECASE)
+        p_clean = p_clean[0].lower() + p_clean[1:] if p_clean else p
+        cleaned.append(p_clean)
+    
+    if len(cleaned) >= 3:
+        return (f"In your writing, I noticed: {cleaned[0]} "
+                f"You should also work on {cleaned[1]} "
+                f"Additionally, {cleaned[2]}")
+    elif len(cleaned) == 2:
+        return (f"In your writing, I noticed: {cleaned[0]} "
+                f"You should also work on {cleaned[1]}")
+    else:
+        return f"In your writing, I noticed: {cleaned[0]}"
+
+
+def _summarize_errors(errors):
+    """Return a human-readable breakdown of errors by supercategory and CEFR level."""
+    by_cat = {}
+    by_level = {}
+    for e in errors:
+        cat = e.get("supercategory", "OTHER").replace("_", " ").title()
+        by_cat[cat] = by_cat.get(cat, 0) + 1
+        lv = e.get("cefr_level", "?")
+        by_level[lv] = by_level.get(lv, 0) + 1
+    
+    total = len(errors)
+    level_parts = [f"{count} at {lv}" for lv, count in sorted(by_level.items())]
+    level_str = ", ".join(level_parts) if level_parts else "unclassified"
+    
+    cat_parts = sorted(by_cat.items(), key=lambda x: -x[1])
+    cat_str = ", ".join(f"{name} ({count})" for name, count in cat_parts)
+    
+    return total, level_str, cat_str
+
+
 def build_typ_header():
     lines = []
     lines.append('#set page(paper: "a4", margin: (x: 1.5cm, top: 2.0cm, bottom: 1.5cm))')
@@ -164,7 +234,7 @@ def build_student_block(student, idx):
     name = esc(raw_name)
     cls = esc(student.get("class", ""))
     summary = student.get("summary", "No summary available.")
-    # Clean summary: strip salutation, replace ERRANT codes, bold headers, sanitize
+    # Clean summary: sanitize unicode, no ERRANT codes in new format
     summary = _sanitize_unicode(summary)
     summary = _strip_salutation(summary, raw_name)
     summary = _replace_errant_codes(summary)
@@ -173,7 +243,8 @@ def build_student_block(student, idx):
     level = _infer_cefr_level(student.get("class", ""))
     target = B1_TARGET if level == "B1" else B2_TARGET
 
-    markup = student.get("corrected_typst", student.get("corrected_with_markup", ""))
+    # Use corrected_typst if available, else use corrected_text as plain text
+    markup = student.get("corrected_typst", student.get("corrected_with_markup", student.get("corrected_text", "")))
     marked = markup.replace("\n", "\n\n")
 
     # Original uncorrected text
@@ -373,7 +444,7 @@ def main():
         files = [f for f in files if f.stem.startswith(folder_name + "-")]
 
     if not files:
-        print(f"No ERRANT output files found in {LOCAL_WORKING_DIR}/")
+        print(f"No analysis output files found in {LOCAL_WORKING_DIR}/")
         sys.exit(1)
 
     today = date.today().strftime("%d-%m-%y")

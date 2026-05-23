@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import os
 import re
 import sys
@@ -18,10 +19,10 @@ load_dotenv(override=True)
 
 API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
 
-CORRECTION_MODEL = "gpt-4o-mini"
+CORRECTION_MODEL = "gpt-4.1-nano"
 SUMMARY_MODEL = "gpt-4o-mini"
 
-# Force direct OpenAI — the system may have OPENAI_BASE_URL set to OpenRouter
+# Force direct OpenAI  -  the system may have OPENAI_BASE_URL set to OpenRouter
 # Reusable client with SDK retries disabled (we handle retry via _retry decorator)
 _client = OpenAI(api_key=API_KEY, base_url="https://api.openai.com/v1", max_retries=0)
 
@@ -29,9 +30,6 @@ OUTPUTS_DIR = Path("outputs")
 LOCAL_WORKING_DIR = Path("local-working")
 
 TEMPERATURE = 0.1
-CORRECTION_TEMPS = [0.1, 0.5]
-VOTE_THRESHOLD = 2
-MODEL_CONTEXT_LIMIT = 32000
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 45
 MULTI_TOKEN_THRESHOLD = 3
@@ -40,10 +38,11 @@ MAX_WORKERS = 5
 MAX_OUTPUT_TOKENS = 1024
 MISSING_STUDENT_IDS: dict[str, list[str]] = {}
 
+# Light-touch correction prompt  -  sentence-by-sentence, preserves student voice
+CORRECTION_PROMPT = """Sentence from a Thai student:
+{text}
 
-CORRECTION_PROMPT = """You are a grammatical error correction tool. Your task is to correct the grammaticality and spelling in the following text written by a student learning English. Make the smallest possible change in order to make the text grammatically correct. Change as few words as possible. Do not rephrase parts that are already grammatical. Do not change the meaning by adding or removing information. If the text is already grammatically correct, output the original text without changing anything. Return only the corrected plain text and nothing else.
-
-{text}"""
+Corrected sentence + brief explanation of changes (one line each)."""
 
 
 def find_output_files():
@@ -75,11 +74,85 @@ def show_menu(files):
 
 
 def call_model(text, temperature=TEMPERATURE):
-    est_tokens = len(text) // 4
-    if est_tokens > MODEL_CONTEXT_LIMIT:
-        tqdm.write(f"  Error: text too long (~{est_tokens} tokens, limit {MODEL_CONTEXT_LIMIT})")
-        return None
     return _call_api(CORRECTION_PROMPT.format(text=text), temperature)
+
+
+def extract_correction(raw_response):
+    """Extract the corrected sentence and edit explanations from GPT-4.1-nano's verbose response.
+    Returns (corrected_sentence, [edit_descriptions])."""
+    if not raw_response:
+        return None, []
+
+    # Try multiple patterns for the corrected sentence
+    corrected = None
+    for pattern in [
+        r'(?:Corrected\s+(?:sentence|version):)\s*(?:\*{0,2})[\u201c\u201d"]?\s*(.+?)[\u201c\u201d"]?\s*(?:\n|$)',
+        r'(?:Corrected\s+(?:sentence|version):)\s*\n\s*(?:\*{0,2})[\u201c\u201d"]?\s*(.+?)[\u201c\u201d"]?\s*(?:\n|$)',
+    ]:
+        m = re.search(pattern, raw_response, re.DOTALL | re.IGNORECASE)
+        if m:
+            corrected = m.group(1).strip().strip('"').strip('\u201c').strip('\u201d')
+            break
+
+    if not corrected:
+        corrected = raw_response.split("\n")[0].strip().strip('"').strip('\u201c').strip('\u201d')
+
+    # Extract explanation lines (things after "Explanation:", "Changes:", or numbered items)
+    explanations = []
+    in_explanation = False
+    for line in raw_response.split("\n"):
+        stripped = line.strip()
+        if re.search(r'(?:Explanation|Changes|Edits?):', stripped, re.IGNORECASE):
+            in_explanation = True
+            # Some explanations follow on the same line after the colon
+            content = re.sub(r'.*?(?:Explanation|Changes|Edits?):\s*', '', stripped, flags=re.IGNORECASE)
+            if content:
+                content = re.sub(r'^\d+[\.\)]\s*', '', content).strip()
+                if content:
+                    explanations.append(content)
+            continue
+        if in_explanation and stripped:
+            # Collect numbered/listed items
+            cleaned = re.sub(r'^\d+[\.\)]\s*', '', stripped).strip()
+            if cleaned and cleaned[0].isupper():
+                cleaned = cleaned[0].lower() + cleaned[1:]
+            if cleaned:
+                explanations.append(cleaned)
+        elif in_explanation and not stripped:
+            in_explanation = False
+
+    return corrected, explanations
+
+
+def correct_text(original_text, nlp_model):
+    """Correct text sentence-by-sentence using GPT-4.1-nano with the light prompt.
+    Returns (corrected_full_text, [per_sentence_explanations])."""
+    orig_doc = nlp_model(original_text)
+    orig_sentences = [sent.text.strip() for sent in orig_doc.sents if sent.text.strip()]
+
+    tqdm.write(f"  Correcting {len(orig_sentences)} sentence(s) with {CORRECTION_MODEL}...")
+
+    corrected_sentences = []
+    all_explanations = []
+
+    for i, sent in enumerate(orig_sentences, 1):
+        prompt = CORRECTION_PROMPT.format(text=sent)
+        raw = _call_api(prompt, TEMPERATURE)
+        if raw:
+            corrected, expls = extract_correction(raw)
+            if corrected:
+                corrected_sentences.append(corrected)
+                if expls:
+                    all_explanations.append({"original": sent, "corrected": corrected, "edits": expls})
+                tqdm.write(f"    S{i}: {sent[:40]}... -> {corrected[:40]}...")
+                continue
+        # Fallback: use original sentence
+        corrected_sentences.append(sent)
+        tqdm.write(f"    S{i}: (no correction) {sent[:40]}...")
+
+    # Join with spaces (sentences already have their own ending punctuation)
+    corrected_text = " ".join(corrected_sentences)
+    return corrected_text, all_explanations
 
 
 def call_model_custom(prompt_content, temperature=TEMPERATURE, model=None):
@@ -114,7 +187,7 @@ def _call_api(content, temperature, model=None):
         tqdm.write("  Error: invalid API key")
         return None
     except BadRequestError as e:
-        tqdm.write(f"  Error: bad request — {e}")
+        tqdm.write(f"  Error: bad request  -  {e}")
         return None
     except RetryableError:
         raise
@@ -216,26 +289,6 @@ def human_error_type(err_type):
     return err_type
 
 
-SUMMARY_PROMPT = """Write a feedback paragraph in this exact format for {name}, a Thai ESL student (error rate: {error_rate}%):
-
-[One sentence of specific, genuine praise about their writing — mention something concrete they did well, like a word they used effectively or an idea they expressed clearly]
-
-I could mostly understand what you were saying, but your communication and grade will improve a lot if you pay special attention to the following mistakes:
-
-1. *[Human-readable error description (ERROR_CODE):* [simple explanation of what they did wrong]. For example, you wrote "[brief quote with error]". It is better to write "[corrected version]".
-2. *[Human-readable error description (ERROR_CODE):* [simple explanation]. For example, you wrote "[brief quote with error]". It is better to write "[corrected version]".
-3. *[Human-readable error description (ERROR_CODE):* [simple explanation]. For example, you wrote "[brief quote with error]". It is better to write "[corrected version]".
-
-Use ONLY errors from this list:
-{error_list}
-
-Format error types as: Human-readable description (CODE) — e.g. "Problems with singular and plural nouns (R:NOUN:NUM)"
-
-The student wrote this:
-{original_text}
-
-Output ONLY the feedback paragraph above. Nothing before or after."""
-
 
 def lookup_student_info(student_id: str) -> dict:
     try:
@@ -243,7 +296,7 @@ def lookup_student_info(student_id: str) -> dict:
         supabase_url = os.environ.get("SUPABASE_URL")
         supabase_key = os.environ.get("SUPABASE_ESL_KEY")
         if not supabase_url or not supabase_key:
-            tqdm.write("  Supabase credentials not set — skipping classlist lookup")
+            tqdm.write("  Supabase credentials not set  -  skipping classlist lookup")
             return {}
         client = create_client(supabase_url, supabase_key)
         result = client.table("classlists").select("student_id, name, class").eq("student_id", student_id).execute()
@@ -272,28 +325,107 @@ def _sanitize_unicode(text):
     return text
 
 
+
+SUMMARY_PROMPT_FMT = """Write a brief feedback paragraph for {name}, a Thai middle-school ESL student (error rate: {error_rate}%).
+
+Start with one sentence of warm, specific praise about their writing - mention something concrete they wrote about. Keep it personal and genuine.
+
+Then write a short natural transition followed by exactly 3 bullet points covering the most important patterns you notice when comparing their original writing to the corrected version. For each:
+- Give it a short, clear name like the examples below
+- Explain WHY it is wrong and give a simple rule they can remember
+- Find a REAL example from the original text and show the corrected version with #underline[] around changed words
+
+Write in the SAME STYLE as these examples (use this as your model for tone and format):
+
+- *Verb tense consistency:* Make sure to keep your verbs in the same tense throughout your writing. You wrote "I felt sad," but it should be "I #underline[feel] sad" to match your present thoughts. Remember, if you're talking about how you currently feel, use the present tense!
+- *Article usage:* Sometimes, you missed articles like "a" and "the." For example, you wrote "to be leader," but it should be "to be #underline[a] leader." Always check if you need "a" or "the" to make your sentences clearer.
+- *Subject-verb agreement:* Be careful that your subjects and verbs match in number. You wrote "my friend make me sure," but it should be "my friend #underline[makes] me sure." If you're talking about one friend, use the singular form of the verb.
+
+ORIGINAL TEXT:
+{original_text}
+
+CORRECTED TEXT (changes underlined):
+{corrected_text}
+
+Write ONLY the feedback paragraph. Nothing else."""
+
+
+def _verify_summary_examples(summary, original_text, corrected_text):
+    """Check that every quoted example actually exists in the original
+    or corrected text. Case-insensitive, punctuation-tolerant.
+    Strips Typst #underline[] markers before comparison.
+    Returns list of warnings (empty = all clean)."""
+    warnings = []
+    strip_ul = lambda t: re.sub(r'#underline\[(.*?)\]', r'\1', t)
+
+    def normalize(t):
+        """Lowercase, strip all punctuation and extra whitespace for fuzzy comparison."""
+        s = strip_ul(t).lower()
+        s = re.sub(r'[.,;:!?\'\"\u2018\u2019\u201c\u201d]+', '', s)
+        s = re.sub(r'\s+', ' ', s).strip()
+        return s
+
+    def fuzzy_in(needle, haystack):
+        """Check if needle appears in haystack, case-insensitive,
+        ignoring leading/trailing punctuation."""
+        n = normalize(needle)
+        h = normalize(haystack)
+        return n in h or needle.lower() in haystack.lower()
+
+    # Find all "You wrote "X"" quotes and check X is in original_text
+    you_wrote = re.findall(r'[Yy]ou wrote\s+["\u201c]([^"\u201d]+)["\u201d]', summary)
+    for q in you_wrote:
+        if not fuzzy_in(q, original_text):
+            warnings.append(f"H: '{q.strip()[:60]}...'")
+
+    # Find all "it is better to write "X"" quotes and check X stripped is in corrected_text
+    better_wrote = re.findall(r'it is better to write\s+["\u201c]([^"\u201d]+)["\u201d]', summary)
+    for q in better_wrote:
+        if not fuzzy_in(q, corrected_text):
+            warnings.append(f"H: '{q.strip()[:60]}...'")
+
+    return warnings
+
+
 def generate_summary(output: dict) -> str | None:
-    errors = output.get("errant_analysis", {}).get("errors", [])
-    if not errors:
-        return "Your writing was very accurate — no corrections were needed. Keep up the great work!"
-    top5 = errors[:5]
-    error_list = "\n".join(
-        f"- {human_error_type(e['type'])} ({e['type']}): {e['count']} time(s) (e.g. {e['example']})"
-        for e in top5
-    )
     name = output.get("name", "student")
-    # Use full student text for accurate quoting
-    sample = output.get("original_text", "")[:2000]
-    prompt = SUMMARY_PROMPT.format(
+    original_text = output.get("original_text", "")
+    corrected_typst = output.get("corrected_typst", output.get("corrected_text", ""))
+
+    prompt = SUMMARY_PROMPT_FMT.format(
         name=name,
         error_rate=output["error_rate"],
-        error_list=error_list,
-        original_text=sample,
+        original_text=original_text,
+        corrected_text=corrected_typst,
     )
     result = call_model_custom(prompt, SUMMARY_TEMPERATURE, model=SUMMARY_MODEL)
-    if result:
-        result = _sanitize_unicode(result)
-    return result if result else f"Your writing had {output['error_rate']}% errors. Keep practicing!"
+    if not result:
+        result = ""
+    result = _sanitize_unicode(result)
+
+    # Deterministic verification: every quoted example must exist in the actual texts
+    corrected_plain = output.get("corrected_text", "")
+    warnings = _verify_summary_examples(result, original_text, corrected_plain)
+    if warnings:
+        for w in warnings[:3]:
+            tqdm.write(f"  Summary verification: {w}")
+        return _build_deterministic_summary(output, errors[:3])
+
+    return result
+
+
+def _build_deterministic_summary(output, top_errors):
+    """Fully deterministic fallback - no LLM at all. Used when verification fails."""
+    name = output.get("name", "student")
+    points = []
+    for e in top_errors[:3]:
+        desc = human_error_type(e["type"])
+        etype = e["type"]
+        count = e.get("count", 1)
+        points.append(f"*{desc} ({etype}):* {count} time(s).")
+
+    bullet_text = "\n".join(f"{i+1}. {p}" for i, p in enumerate(points))
+    return f"Great work on your writing, {name}! Keep working on these areas to improve:\n\n{bullet_text}"
 
 
 def insert_error_reports(output: dict):
@@ -302,7 +434,7 @@ def insert_error_reports(output: dict):
         supabase_url = os.environ.get("SUPABASE_URL")
         supabase_key = os.environ.get("SUPABASE_ESL_KEY")
         if not supabase_url or not supabase_key:
-            tqdm.write("  Supabase credentials not set — skipping error_reports insert")
+            tqdm.write("  Supabase credentials not set  -  skipping error_reports insert")
             return
         client = create_client(supabase_url, supabase_key)
         row = {
@@ -418,25 +550,6 @@ def build_corrected_typst(orig_doc, edits):
     return result
 
 
-def intersect_edits(edit_lists, threshold=2):
-    """Edit-level majority voting: return edits appearing in >= threshold of the edit lists."""
-    from collections import defaultdict
-    counts = defaultdict(int)
-    edits_by_key = {}
-
-    for edits in edit_lists:
-        seen_in_this_list = set()
-        for e in edits:
-            key = (e.o_start, e.o_end, e.type)
-            if key in seen_in_this_list:
-                continue
-            seen_in_this_list.add(key)
-            edits_by_key[key] = e
-            counts[key] += 1
-
-    return [edits_by_key[k] for k, c in counts.items() if c >= threshold]
-
-
 def _make_edit(o_start, o_end, o_toks, o_str, c_start, c_end, c_toks, c_str, etype):
     return type("Edit", (), {
         "o_start": o_start, "o_end": o_end,
@@ -506,9 +619,6 @@ def build_metadata(edits, corrected_text, original_text):
 
     return {
         "model": CORRECTION_MODEL,
-        "temperature": TEMPERATURE,
-        "correction_temps": CORRECTION_TEMPS,
-        "vote_threshold": VOTE_THRESHOLD,
         "identity_check": identity,
         "overcorrection_count": oc_count,
         "overcorrection_warnings": oc_warnings,
@@ -540,7 +650,7 @@ def align_sentences(orig_sentences, cor_sentences):
     if len(orig_sentences) == 1 and len(cor_sentences) == 1:
         return [{"original": orig_sentences[0], "corrected": cor_sentences[0]}]
 
-    # Equal count — pair directly without fuzzy matching
+    # Equal count  -  pair directly without fuzzy matching
     if len(orig_sentences) == len(cor_sentences):
         return [
             {"original": o, "corrected": c}
@@ -621,7 +731,11 @@ def align_sentences(orig_sentences, cor_sentences):
     return pairs
 
 
-def classify_edits(edits):
+def classify_edits(edits, orig_tokens=None, cor_tokens=None):
+    """Classify edits by type, building context-rich examples.
+    If orig_tokens/cor_tokens are provided (lists from annotator.parse()),
+    each example includes surrounding words for context in both the original
+    and corrected versions."""
     error_groups = {}
     uncategorised = []
     dropped_edits = {"UNK": 0, "U:SPACE": 0, "UNK_examples": [], "U:SPACE_examples": []}
@@ -630,7 +744,6 @@ def classify_edits(edits):
         e_type = e.type
         if e_type in ("OTHER", "R:OTHER") and e.o_toks and e.c_toks:
             e_type = post_classify_other(e.o_str, e.c_str)
-        # Track dropped edits explicitly instead of silently skipping
         if e_type in ("UNK", "U:SPACE"):
             dropped_edits[e_type] += 1
             example = f"{str(e.o_str).strip()} -> {str(e.c_str).strip()}"
@@ -649,8 +762,44 @@ def classify_edits(edits):
         if e_type in ("UNK", "U:SPACE"):
             continue
         example = f"{e.o_str.strip()} -> {e.c_str.strip()}" if e.o_str and e.c_str else str(e.c_str)
+
+        # Build context original: show ~3 preceding words and ~3 following words
+        context_original = example
+        context_corrected = example
+        if orig_tokens and e.o_toks:
+            start = max(0, e.o_start - 3)
+            end = min(len(orig_tokens), e.o_end + 3)
+            before = " ".join(orig_tokens[start:e.o_start])
+            after = " ".join(orig_tokens[e.o_end:end])
+            punct_before = "..." if start > 0 else ""
+            punct_after = "..." if end < len(orig_tokens) else ""
+            o_str = e.o_str.strip() if e.o_str else ""
+            c_str = e.c_str.strip() if e.c_str else ""
+            context_original = f"{punct_before}{before} {o_str} {after}{punct_after}"
+
+        # Build context corrected: show same span in the corrected text
+        if cor_tokens and e.c_toks:
+            c_start = max(0, e.c_start - 3)
+            c_end = min(len(cor_tokens), e.c_end + 3)
+            c_before = " ".join(cor_tokens[c_start:e.c_start])
+            c_after = " ".join(cor_tokens[e.c_end:c_end])
+            cpunct_before = "..." if c_start > 0 else ""
+            cpunct_after = "..." if c_end < len(cor_tokens) else ""
+            c_str = e.c_str.strip() if e.c_str else ""
+
+            # For insertion edits with no corrected text, just use the corrected token
+            if not c_str and e.c_toks:
+                c_str = " ".join(t.text for t in e.c_toks)
+            context_corrected = f"{cpunct_before}{c_before} {c_str} {c_after}{cpunct_after}"
+
         if e_type not in error_groups:
-            error_groups[e_type] = {"type": e_type, "example": example, "count": 0}
+            error_groups[e_type] = {
+                "type": e_type,
+                "example": example,
+                "context_original": context_original,
+                "context_corrected": context_corrected,
+                "count": 0,
+            }
         error_groups[e_type]["count"] += 1
 
     errors_list = sorted(error_groups.values(), key=lambda x: x["count"], reverse=True)
@@ -677,7 +826,7 @@ def process_file(file_path, nlp=None, annotator=None):
         if source_images:
             entry += "  (source: " + ", ".join(source_images) + ")"
         MISSING_STUDENT_IDS.setdefault(student_id, []).append(entry)
-        tqdm.write(f"  No classlist entry for {student_id} — name and class fields will be empty")
+        tqdm.write(f"  No classlist entry for {student_id}  -  name and class fields will be empty")
     if data.get("name"):
         student_info["name"] = data["name"]
     if data.get("class"):
@@ -699,26 +848,10 @@ def process_file(file_path, nlp=None, annotator=None):
         annotator = errant.load("en")
 
     # Use annotator.parse() (whitespace-split tokenization) for ERRANT alignment
-    # so both original and corrected use consistent token bounds.
-    # Use nlp() above for sentence extraction only (more accurate boundaries).
     orig_parse = annotator.parse(original_text)
 
-    # Multi-pass correction with edit-level majority voting
-    temps_str = ", ".join(f"temp={t}" for t in CORRECTION_TEMPS)
-    tqdm.write(f"  Correcting text ({len(CORRECTION_TEMPS)} passes: {temps_str})...")
-    results = []
-    for temp in CORRECTION_TEMPS:
-        results.append(call_model(original_text, temp))
-
-    # Use the first successful result as the primary corrected text
-    corrected_text = None
-    for r in results:
-        if r:
-            corrected_text = r
-            break
-    if not corrected_text:
-        tqdm.write("  All correction passes failed, using original as-is.")
-        corrected_text = original_text
+    # ---- Step 1: Sentence-by-sentence correction via GPT-4.1-nano ----
+    corrected_text, llm_edits = correct_text(original_text, nlp)
 
     corrected_text = corrected_text.strip()
     tqdm.write(f"  Corrected length: {len(corrected_text)} chars")
@@ -729,38 +862,26 @@ def process_file(file_path, nlp=None, annotator=None):
     output["submission_date"] = submission_date
     output["topic"] = topic
 
-    # Noop check — if text is identical, skip ERRANT
+    # Noop check
     if original_text.strip() == corrected_text.strip():
-        tqdm.write("  No corrections needed — text unchanged by model.")
+        tqdm.write("  No corrections needed  -  text unchanged by model.")
         output["metadata"] = build_metadata([], corrected_text, original_text)
+        output["llm_edits"] = llm_edits
         return _finalize_output(output, file_path)
 
-    # Run ERRANT on each successful correction pass
-    successful_results = [r for r in results if r is not None]
-    edit_lists = []
-    for res in successful_results:
-        cor_doc = annotator.parse(res) if res else orig_parse
-        edits = annotator.annotate(orig_parse, cor_doc)
-        edit_lists.append(edits)
+    # ---- Step 2: Run ERRANT diff on original vs corrected ----
+    cor_parse = annotator.parse(corrected_text)
+    edits = annotator.annotate(orig_parse, cor_parse)
 
-    # Majority voting: adopt edits that appear in >= VOTE_THRESHOLD passes
-    confirmed_edits = intersect_edits(edit_lists, VOTE_THRESHOLD)
-    # Count uncertain: unique edits appearing in fewer than VOTE_THRESHOLD passes
-    all_unique = intersect_edits(edit_lists, threshold=1)
-    uncertain_count = len(all_unique) - len(confirmed_edits) if all_unique else 0
-    use_edits = confirmed_edits if confirmed_edits else (edit_lists[0] if edit_lists else [])
+    # ---- Step 3: Post-process edits ----
+    edits = pre_split_edits(annotator, edits, orig_parse, cor_parse)
+    orig_tokens = [t.text for t in orig_parse]
+    cor_tokens = [t.text for t in cor_parse]
+    errors_list, uncategorised, dropped_edits = classify_edits(edits, orig_tokens, cor_tokens)
+    metadata = build_metadata(edits, corrected_text, original_text)
 
-    cor_doc = annotator.parse(corrected_text)
-
-    # GAP-4: Pre-split multi-token edits
-    use_edits = pre_split_edits(annotator, use_edits, orig_parse, cor_doc)
-
-    # GAP-1: Overcorrection detection + GAP-5: Metadata
-    errors_list, uncategorised, dropped_edits = classify_edits(use_edits)
-    metadata = build_metadata(use_edits, corrected_text, original_text)
-    metadata["uncertain_edit_count"] = uncertain_count if len(successful_results) >= 2 else len(use_edits) // 2
-
-    corrected_typst = build_corrected_typst(orig_parse, use_edits)
+    # ---- Step 4: Build Typst markup and sentence pairs ----
+    corrected_typst = build_corrected_typst(orig_parse, edits)
 
     cor_sentences = [sent.text.strip() for sent in nlp(corrected_text).sents]
     sentence_pairs = align_sentences(orig_sentences, cor_sentences)
@@ -770,11 +891,12 @@ def process_file(file_path, nlp=None, annotator=None):
 
     output = _build_output(student_id, original_text, corrected_text, word_count, student_info,
                            sentence_pairs, {"errors": errors_list, "uncategorised": uncategorised, "dropped_edits": dropped_edits},
-                           corrected_typst, error_rate, use_edits)
+                           corrected_typst, error_rate, edits)
     output["record_id"] = record_id
     output["submission_date"] = submission_date
     output["topic"] = topic
     output["metadata"] = metadata
+    output["llm_edits"] = llm_edits
 
     return _finalize_output(output, file_path)
 
