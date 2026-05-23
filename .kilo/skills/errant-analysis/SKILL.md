@@ -263,6 +263,22 @@ python src/generate_report.py "folder-name"
 
 ---
 
+## Versioning
+
+This project uses [semantic versioning](https://semver.org/) with git tags:
+
+| Bump | When | Example |
+|------|------|---------|
+| **Major** | Pipeline restructuring, model changes, output format breaking changes | `v2.0.0` |
+| **Minor** | New features, new error codes, new output fields, prompt improvements | `v2.1.0` |
+| **Patch** | Bug fixes, documentation updates, configuration changes | `v2.0.1` |
+
+Tags are created with `git tag -a vX.Y.Z -m "message"` and pushed with `git push --tags`.
+Every commit that changes pipeline behavior (model, correction logic, output format)
+must be tagged before or immediately after pushing.
+
+---
+
 ## Codebase Research via gh — Mandatory Before Guessing ERRANT Internals
 
 **Do NOT guess or hallucinate** the contents of ERRANT's classifier, merger, tokenizer, or any other `errant/en/*.py` file. Use the relevant `gh api` command first and read the actual source.
