@@ -6,16 +6,21 @@ cross-references classlists, normalises error counts, and
 outputs clean DataFrames for analysis.
 """
 
+import os
 import json
 import glob
-import csv
 from pathlib import Path
 from collections import Counter
 from datetime import datetime
 
 import pandas as pd
+from dotenv import load_dotenv
+from supabase import create_client
 
-STUDENTS_PATH = Path("docs/students.txt")
+load_dotenv()
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_ESL_KEY")
 RESEARCH_DIR = Path("local-working")
 OUTPUT_DIR = Path("outputs/analysis")
 
@@ -28,20 +33,20 @@ REQUIRED_META_FLAT = [
 ]
 
 
-def load_classlist(path: Path) -> dict[str, str]:
-    """Load students.txt -> {student_id: sub_class} (e.g. M2-4A)."""
+def load_classlist_supabase() -> dict[str, str]:
+    """Load classlist from Supabase -> {student_id: sub_class} (e.g. M2-4A)."""
     mapping = {}
-    if not path.exists():
-        print(f"WARNING: {path} not found — classlist cross-reference disabled.")
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("WARNING: SUPABASE_URL or SUPABASE_ESL_KEY not set — classlist cross-reference disabled.")
         return mapping
-    with open(path, encoding="utf-8") as f:
-        reader = csv.reader(f, delimiter="\t")
-        next(reader, None)
-        for cols in reader:
-            if len(cols) >= 3:
-                sid = cols[1].strip()
-                cls = cols[0].strip()
-                mapping[sid] = cls if cls else "UNKNOWN"
+    try:
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        result = client.table("classlists").select("student_id, class").execute()
+        for row in result.data:
+            mapping[row["student_id"]] = row.get("class", "UNKNOWN")
+        print(f"Classlist loaded from Supabase: {len(mapping)} students")
+    except Exception as e:
+        print(f"WARNING: Could not load classlist from Supabase: {e}")
     return mapping
 
 
@@ -258,8 +263,7 @@ def normalise_error_counts(df: pd.DataFrame) -> pd.DataFrame:
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    classlist = load_classlist(STUDENTS_PATH)
-    print(f"Classlist loaded: {len(classlist)} students")
+    classlist = load_classlist_supabase()
 
     files = sorted(glob.glob(str(RESEARCH_DIR / "research-*.json")))
     print(f"Research files found: {len(files)}")

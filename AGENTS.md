@@ -13,7 +13,6 @@ This project runs on Windows PowerShell 5.1.
 - `/ingest-papers` — Transcribe handwritten essays from `inputs/` subfolders using `google/gemini-2.5-flash-lite-preview-09-2025`
 - `/local-errant-analysis` — Run ERRANT grammatical error analysis on transcribed essays
 - `/git-backup` — Diff, commit with a verbose message, and push to remote
-- `/supabase-classlist` — Sync `docs/students.txt` classlist data to Supabase
 - `/rename-json-files` — Rename ERRANT output JSONs to student_id.json, validated against Supabase classlist
 - `/review` — Run lint, tests, and quality review of uncommitted changes against project conventions
 - `/local-report` — Generate Typst report booklets from ERRANT analysis with summary, charts, and PDF output
@@ -24,7 +23,6 @@ This project runs on Windows PowerShell 5.1.
 - `.kilo/skills/ingest-images/SKILL.md` — Full workflow for handwriting image ingestion and transcription
 - `.kilo/skills/errant-analysis/SKILL.md` — Full workflow for grammatical error analysis with ERRANT
 - `.kilo/skills/git-backup/SKILL.md` — Full workflow for diff, commit, and push
-- `.kilo/skills/supabase-classlist/SKILL.md` — Full workflow for Supabase classlist management via supabase-py
 - `.kilo/skills/rename-json-files/SKILL.md` — Full workflow for renaming ERRANT output files with classlist validation
 - `.kilo/skills/local-report/SKILL.md` — Full workflow for generating Typst report booklets with summary, charts, and PDF compilation
 - `.kilo/skills/tavily-websearch/SKILL.md` — Global skill: Web search via Tavily AI Search API (5 pre-written Python models). Use for research, fact-checking, or content gathering. Copy the script verbatim from the skill, change only the query/URL/parameters.
@@ -81,8 +79,8 @@ Context7 has Typst indexed (ID: `/typst/typst`). Use Context7 as the first choic
 
 | Item | Path |
 |------|------|
-| Main script | `src/ingest.py`, `src/errant_analysis.py`, `src/supabase_classlist.py`, `src/rename_json_files.py`, `src/add_word_count.py`, `src/generate_report.py`, `src/interpret_results.py`, `src/desk_statistics.py` |
-| Tests | `tests/test_ingest.py`, `tests/test_errant.py`, `tests/test_supabase_classlist.py`, `tests/test_rename_json_files.py`, `tests/test_report.py` |
+| Main script | `src/ingest.py`, `src/errant_analysis.py`, `src/rename_json_files.py`, `src/add_word_count.py`, `src/generate_report.py`, `src/interpret_results.py`, `src/desk_statistics.py` |
+| Tests | `tests/test_ingest.py`, `tests/test_errant.py`, `tests/test_rename_json_files.py`, `tests/test_report.py` |
 | Dependencies | `requirements.txt` |
 | Linter | `ruff` (config: `.ruff.toml`) |
 | Test runner | `pytest` |
@@ -115,7 +113,7 @@ The `class` field in ERRANT output JSONs uses M2/M3 as **enrollment status, not 
 - **M2** = student_id is in the current `classlists` Supabase table (active, still enrolled)
 - **M3** = student_id is NOT in `classlists` (left the program)
 
-All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the paper classlist. The label reflects enrollment, not which year they're in. This is consistent across all 689 files (zero anomalies).
+All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the Supabase classlist. The label reflects enrollment, not which year they're in. This is consistent across all 689 files (zero anomalies).
 
 ## Input/output conventions
 

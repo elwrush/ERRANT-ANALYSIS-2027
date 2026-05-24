@@ -21,7 +21,7 @@
 
 **What are the most frequent grammatical error types in M2 and M3 learner writing, and how do their relative frequency rankings differ between the two cohorts?**
 
-*Approach:* Aggregate `errant_analysis.errors[*].count` by error type, normalised per 100 words, separately for M2 and M3. Produce ranked tables and side-by-side comparison of the top-15 error types per cohort. Prior research on proficiency-level error profiling (Beginners: tense/verb-form dominant; Advanced: determiners, prepositions, complex structures) provides an expected gradient against which to compare findings. Secondary cut: within-cohort breakdown by sub-class (M2-4A vs M2-5A; M3-3A, M3-4A, M3-5A via `docs/students.txt` cross-reference) to identify potential classroom-level effects.
+*Approach:* Aggregate `errant_analysis.errors[*].count` by error type, normalised per 100 words, separately for M2 and M3. Produce ranked tables and side-by-side comparison of the top-15 error types per cohort. Prior research on proficiency-level error profiling (Beginners: tense/verb-form dominant; Advanced: determiners, prepositions, complex structures) provides an expected gradient against which to compare findings. Secondary cut: within-cohort breakdown by sub-class (M2-4A vs M2-5A; M3-3A, M3-4A, M3-5A via the Supabase `classlists` table cross-reference) to identify potential classroom-level effects.
 
 *Variables:* Cohort (M2/M3, categorical IV); error type frequency (continuous DV, normalised per 100 words).
 
@@ -96,9 +96,9 @@
 
 **To what extent do mean error rates and error-type profiles differ between the two academic sub-classes within the active-student cohort (M3-4A vs M3-5A, both labelled M2 in the data), and can such differences be attributed to instructional effects rather than intake variation?**
 
-*Approach:* Cross-reference `student_id` with `docs/students.txt` to assign sub-class (M3-4A or M3-5A) to the 36 active students. Compare mean error rates and error-type distributions across sub-classes using Mann-Whitney U tests (since this is a two-group comparison). Report effect sizes (Cliff's δ). If significant differences emerge, test the confound of topic distribution (χ²) — one sub-class may have written on systematically different prompts.
+*Approach:* Cross-reference `student_id` with the Supabase `classlists` table to assign sub-class (M3-4A or M3-5A) to the 36 active students. Compare mean error rates and error-type distributions across sub-classes using Mann-Whitney U tests (since this is a two-group comparison). Report effect sizes (Cliff's δ). If significant differences emerge, test the confound of topic distribution (χ²) — one sub-class may have written on systematically different prompts.
 
-*Caveat:* The 36 former (M3-labelled) students are not in students.txt, so sub-class is unknown. They are excluded from this analysis.
+*Caveat:* The 36 former (M3-labelled) students are not in the Supabase classlists table, so sub-class is unknown. They are excluded from this analysis.
 
 *Variables:* Sub-class (M3-4A / M3-5A, categorical IV); mean error rate, per-type normalised error counts (DVs).
 
@@ -184,7 +184,7 @@
 | RQ4 | All research files + `submission_date` | Medium | **Strong** (70 students with 2-15 submissions) |
 | RQ5 | `metadata.*`, `error_rate`, `submission_date` | Medium | Immediate |
 | RQ6 | `topic`, `errant_analysis.errors`, `class` | Medium | Needs topic inventory (V8) |
-| RQ7 | Cross-ref with `docs/students.txt` for sub-class | Medium | **Constrained to active group only (36 students, 2 sub-classes)** |
+| RQ7 | Cross-ref with the Supabase `classlists` table for sub-class | Medium | **Constrained to active group only (36 students, 2 sub-classes)** |
 | RQ8 | `word_count`, `error_rate`, `class` | Low | Immediate |
 | RQ9 | `errant_analysis.uncategorised`, `metadata.total_edit_count` | Medium | Immediate |
 | RQ10 | `errant_analysis.errors`, `student_id`, `word_count` | High | Needs clustering libs |
@@ -202,7 +202,7 @@
 **Step 1.1 — Extraction:** Build `src/interpret_results.py`:
 1. Iterate all `local-working/research-*.json`
 2. Extract: `student_id`, `class`, `name`, `error_rate`, `word_count`, `errant_analysis.errors[]`, `errant_analysis.uncategorised`, `metadata` (overcorrection_count, total_edit_count, uncertain_edit_count, edit_width_stats), `topic`, `submission_date`, `summary`
-3. Cross-reference with `docs/students.txt` to recover sub-class assignments
+3. Cross-reference with the Supabase `classlists` table to recover sub-class assignments
 4. Aggregate into pandas DataFrames (one per cohort, one combined)
 5. Normalise error counts to errors-per-100-words for cross-student comparison
 6. Output clean summary CSVs for further analysis
@@ -295,7 +295,7 @@ All analyses use Python with `scipy`, `statsmodels`, `scikit-learn`, and `pandas
 
 ### RQ7 — Sub-class effects (inferential, within active group only)
 
-- **Step 1 — Cross-reference:** Join research files with `docs/students.txt` on `student_id` to recover sub-class (M3-4A or M3-5A). Only the 36 active (M2-labelled) students are in students.txt; former students have no sub-class assignment and are excluded
+- **Step 1 — Cross-reference:** Join research files with the Supabase `classlists` table on `student_id` to recover sub-class (M3-4A or M3-5A). Only the 36 active (M2-labelled) students are in the Supabase classlists table; former students have no sub-class assignment and are excluded
 - **Step 2 — Error rate:** Mann-Whitney U comparing per-student mean error rate between M3-4A and M3-5A (two-group comparison, no need for ANOVA)
 - **Step 3 — Error-type profiles:** Separate Mann-Whitney U tests per error type with Bonferroni correction, on normalised counts
 - **Assumptions:** Mann-Whitney is non-parametric, no normality assumption. Distributions checked visually for shape similarity
@@ -388,10 +388,10 @@ Data validation runs as a pre-analysis gate in Phase 1 (data wrangling). No anal
 
 ### V4. Cohort assignment verification
 
-- **Check:** Cross-reference every `student_id` in research files against `docs/students.txt`. Verify:
-  - Every student_id exists in students.txt (if not, flag as orphan)
-  - The `class` field (M2/M3) in the research file is consistent with the class prefix in students.txt (e.g., student 29561 in research file has class="M2" but students.txt says M3-4A)
-- **Action on failure:** If class mismatch detected, prefer students.txt (source of truth) and log discrepancy. If student not in students.txt, retain at cohort level if `class` field is present; exclude from RQ7 (sub-class analysis) but include in broader analyses
+- **Check:** Cross-reference every `student_id` in research files against the Supabase `classlists` table. Verify:
+  - Every student_id exists in the Supabase classlists table (if not, flag as orphan)
+  - The `class` field (M2/M3) in the research file is consistent with the class prefix in the Supabase classlists table (e.g., student 29561 in research file has class="M2" but the Supabase classlists table says M3-4A)
+- **Action on failure:** If class mismatch detected, prefer the Supabase classlists table (source of truth) and log discrepancy. If student not in the Supabase classlists table, retain at cohort level if `class` field is present; exclude from RQ7 (sub-class analysis) but include in broader analyses
 - **Output:** Mismatch report — student_id, class_in_file, class_in_students_txt, action_taken
 
 ### V5. Duplicate detection

@@ -10,11 +10,15 @@ Transcribe handwritten student essays from scanned images into structured JSON u
 pip install -r requirements.txt
 ```
 
-Set the API key in `.env` or as an environment variable:
+Set the API keys in `.env` or as environment variables:
 
 ```
 OPENROUTER_API_KEY=sk-or-v1-...
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ESL_KEY=sb_secret_...
 ```
+
+`SUPABASE_URL` and `SUPABASE_ESL_KEY` are optional — without them, student name/class lookup is skipped.
 
 ## Input Format
 
@@ -44,30 +48,56 @@ inputs/
 
 ## Usage
 
+### Interactive mode (human at terminal)
+
 ```bash
 python src/ingest.py
 ```
 
-The script is fully interactive — once launched it handles all prompts directly:
-1. Scans `inputs/` for subfolders and shows a numbered list — user types the number to select a folder
-2. Asks for pages per essay — user types a numeral (e.g. `1`, `2`, `3`, `4`)
-3. Images are sorted by page number and grouped sequentially into essays of `N` pages each (where `N` is the number you entered). Images without a page-number digit group become single-page essays with auto-generated IDs. Pages within an essay are joined with a single space (not `\n`) so continuous paragraphs flow correctly.
-4. Processes each student's pages serially with jitter between requests
-5. Writes output JSONs to `outputs/{folder_name}/{student_id}.json`
+Shows a numbered menu of folders and prompts for pages per essay.
+
+### CLI mode (for agents / automation)
+
+```bash
+python src/ingest.py --folder "M2-5A BASELINE" --pages 2
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--folder` | Folder name (e.g. `"M2-5A BASELINE"`) or index number (e.g. `"2"`) |
+| `--pages`  | Number of images per essay (e.g. `2`) |
+
+Both arguments are optional. When omitted, the script falls back to interactive prompts.
+
+### Workflow (agent mode)
+
+Use the `question` tool to gather `--folder` and `--pages` from the user, then run the script with those arguments. The script processes each student's pages with jitter between requests and writes output JSONs to `outputs/{folder_name}/{student_id}.json`.
 
 ## Output Format
 
-One JSON file per student. Multi-page essays have their text joined with `\n`.
+One JSON file per student. Multi-page essays have their pages joined with a single space.
 
 ```json
 {
   "student_id": "12345",
   "student_text": "Page 1 content with \n paragraph breaks.\nPage 2 content...",
+  "name": "August",
+  "class": "M2-5A",
   "source_images": ["img-0001.jpg", "img-0002.jpg"]
 }
 ```
 
-The `source_images` field lists the original image filenames that produced the transcription, enabling cross-reference back to the source scans.
+| Field | Description |
+|-------|-------------|
+| `student_id` | 5-digit ID extracted from the page by the vision model |
+| `student_text` | Transcribed text with `\n` at paragraph boundaries only |
+| `name` | Student name from Supabase `classlists` table (empty if not found) |
+| `class` | Sub-class label from Supabase `classlists` (e.g. M2-5A, empty if not found) |
+| `source_images` | Original image filenames enabling cross-reference back to source scans |
+
+### Supabase lookup
+
+After extracting the student ID from the page, the script queries the Supabase `classlists` table for the student's `name` and `class`. If the student is not found (e.g. former students labelled M3), both fields are set to empty strings. This lookup requires `SUPABASE_URL` and `SUPABASE_ESL_KEY` environment variables — if either is missing, the lookup is skipped and both fields are empty.
 
 ## Model
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 import os
 import re
 import sys
@@ -38,11 +37,21 @@ MAX_WORKERS = 5
 MAX_OUTPUT_TOKENS = 1024
 MISSING_STUDENT_IDS: dict[str, list[str]] = {}
 
-# Light-touch correction prompt  -  sentence-by-sentence, preserves student voice
-CORRECTION_PROMPT = """Sentence from a Thai student:
+# Whole-text correction prompt — preserves every word, only fixes grammar/spelling
+CORRECTION_PROMPT = """Fix ONLY grammar and spelling in the text below.
+
+CRITICAL RULES:
+- Do NOT delete words unless clearly duplicated or wrong (e.g. "world wide" → "worldwide")
+- Do not reorder, restructure, or rephrase
+- Do not merge or split sentences
+- Preserve all original quotes, paragraph breaks, and most punctuation
+- Convert & to "and" where it represents the word "and"
+- Only change: verb tense, subject-verb agreement, articles, prepositions, spelling, punctuation, & → and
+
+Original text:
 {text}
 
-Corrected sentence + brief explanation of changes (one line each)."""
+Corrected text:"""
 
 
 def find_output_files():
@@ -78,81 +87,67 @@ def call_model(text, temperature=TEMPERATURE):
 
 
 def extract_correction(raw_response):
-    """Extract the corrected sentence and edit explanations from GPT-4.1-nano's verbose response.
-    Returns (corrected_sentence, [edit_descriptions])."""
+    """Extract the corrected text from the model's response to the whole-text prompt.
+    Returns (corrected_text, []). Second element is always [] (no per-sentence explanations)."""
     if not raw_response:
         return None, []
 
-    # Try multiple patterns for the corrected sentence
-    corrected = None
-    for pattern in [
-        r'(?:Corrected\s+(?:sentence|version):)\s*(?:\*{0,2})[\u201c\u201d"]?\s*(.+?)[\u201c\u201d"]?\s*(?:\n|$)',
-        r'(?:Corrected\s+(?:sentence|version):)\s*\n\s*(?:\*{0,2})[\u201c\u201d"]?\s*(.+?)[\u201c\u201d"]?\s*(?:\n|$)',
-    ]:
-        m = re.search(pattern, raw_response, re.DOTALL | re.IGNORECASE)
-        if m:
-            corrected = m.group(1).strip().strip('"').strip('\u201c').strip('\u201d')
-            break
+    # Try to strip "Corrected text:" prefix if model included it
+    m = re.search(r'(?:Corrected\s+text:)\s*(.+?)$', raw_response, re.DOTALL | re.IGNORECASE)
+    if m:
+        return m.group(1).strip(), []
 
-    if not corrected:
-        corrected = raw_response.split("\n")[0].strip().strip('"').strip('\u201c').strip('\u201d')
+    # No prefix found — use the entire response as the correction
+    return raw_response.strip(), []
 
-    # Extract explanation lines (things after "Explanation:", "Changes:", or numbered items)
-    explanations = []
-    in_explanation = False
-    for line in raw_response.split("\n"):
-        stripped = line.strip()
-        if re.search(r'(?:Explanation|Changes|Edits?):', stripped, re.IGNORECASE):
-            in_explanation = True
-            # Some explanations follow on the same line after the colon
-            content = re.sub(r'.*?(?:Explanation|Changes|Edits?):\s*', '', stripped, flags=re.IGNORECASE)
-            if content:
-                content = re.sub(r'^\d+[\.\)]\s*', '', content).strip()
-                if content:
-                    explanations.append(content)
-            continue
-        if in_explanation and stripped:
-            # Collect numbered/listed items
-            cleaned = re.sub(r'^\d+[\.\)]\s*', '', stripped).strip()
-            if cleaned and cleaned[0].isupper():
-                cleaned = cleaned[0].lower() + cleaned[1:]
-            if cleaned:
-                explanations.append(cleaned)
-        elif in_explanation and not stripped:
-            in_explanation = False
 
-    return corrected, explanations
+def _post_process_correction(corrected, original):
+    """Apply deterministic fixes that the LLM may miss."""
+    text = corrected
+    # Convert standalone & to "and" (not part of HTML entities or other constructs)
+    text = re.sub(r'(?<=\s)&(?=\s)', 'and', text)
+    text = re.sub(r'(?<=\w)&(?=\s)', ' and', text)
+    text = re.sub(r'(?<=\s)&(?=\w)', 'and ', text)
+    # Common merged words: "world wide" → "worldwide" (keep "a lot" separate)
+    text = re.sub(r'\bin the world wide\b', 'worldwide', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bthe world wide\b', 'worldwide', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bworld wide\b', 'worldwide', text, flags=re.IGNORECASE)
+    # Clean up "the worldwide" → "worldwide"
+    text = re.sub(r'\bthe worldwide\b', 'worldwide', text, flags=re.IGNORECASE)
+    # Remove duplicate space from any edits above
+    text = re.sub(r'\s+', ' ', text)
+    return text
 
 
 def correct_text(original_text, nlp_model):
-    """Correct text sentence-by-sentence using GPT-4.1-nano with the light prompt.
-    Returns (corrected_full_text, [per_sentence_explanations])."""
-    orig_doc = nlp_model(original_text)
-    orig_sentences = [sent.text.strip() for sent in orig_doc.sents if sent.text.strip()]
-
-    tqdm.write(f"  Correcting {len(orig_sentences)} sentence(s) with {CORRECTION_MODEL}...")
-
-    corrected_sentences = []
-    all_explanations = []
-
-    for i, sent in enumerate(orig_sentences, 1):
-        prompt = CORRECTION_PROMPT.format(text=sent)
-        raw = _call_api(prompt, TEMPERATURE)
-        if raw:
-            corrected, expls = extract_correction(raw)
-            if corrected:
-                corrected_sentences.append(corrected)
-                if expls:
-                    all_explanations.append({"original": sent, "corrected": corrected, "edits": expls})
-                tqdm.write(f"    S{i}: {sent[:40]}... -> {corrected[:40]}...")
-                continue
-        # Fallback: use original sentence
-        corrected_sentences.append(sent)
-        tqdm.write(f"    S{i}: (no correction) {sent[:40]}...")
-
-    # Join with spaces (sentences already have their own ending punctuation)
-    corrected_text = " ".join(corrected_sentences)
-    return corrected_text, all_explanations
+    """Correct the full text in one pass using GPT-4.1-nano.
+    Preserves paragraph breaks and sentence boundaries.
+    Returns (corrected_full_text, [], [])."""
+    tqdm.write(f"  Correcting full text ({len(original_text)} chars)...")
+    
+    raw = _call_api(CORRECTION_PROMPT.format(text=original_text), TEMPERATURE)
+    if not raw:
+        tqdm.write("  No correction received, using original text")
+        return original_text, [], []
+    
+    corrected, _ = extract_correction(raw)
+    if not corrected:
+        tqdm.write("  Could not extract correction, using original text")
+        return original_text, [], []
+    
+    corrected = corrected.strip()
+    # Apply deterministic post-processing
+    corrected = _post_process_correction(corrected, original_text)
+    
+    # Verify paragraph count matches
+    orig_paras = [p for p in original_text.split("\n") if p.strip()]
+    cor_paras = [p for p in corrected.split("\n") if p.strip()]
+    
+    if len(cor_paras) != len(orig_paras):
+        tqdm.write(f"  Warning: paragraph count mismatch — original has {len(orig_paras)} paragraph(s), corrected has {len(cor_paras)}. Using corrected text anyway.")
+    
+    tqdm.write(f"  Corrected length: {len(corrected)} chars (original: {len(original_text)} chars)")
+    return corrected, [], []
 
 
 def call_model_custom(prompt_content, temperature=TEMPERATURE, model=None):
@@ -326,68 +321,95 @@ def _sanitize_unicode(text):
 
 
 
-SUMMARY_PROMPT_FMT = """Write a brief feedback paragraph for {name}, a Thai middle-school ESL student (error rate: {error_rate}%).
+SUMMARY_PROMPT_FMT = """Analyze the writing of {name}, a Thai middle-school ESL student (error rate: {error_rate}%).
 
-Start with one sentence of warm, specific praise about their writing - mention something concrete they wrote about. Keep it personal and genuine.
+Return ONLY a JSON object with these exact keys (no markdown, no code fences, no extra text):
 
-Then write a short natural transition followed by exactly 3 bullet points covering the most important patterns you notice when comparing their original writing to the corrected version. For each:
-- Give it a short, clear name like the examples below
-- Explain WHY it is wrong and give a simple rule they can remember
-- Find a REAL example from the original text and show the corrected version with #underline[] around changed words
+1. "praise": 2-3 sentences of warm, specific praise about their writing - mention something concrete they wrote about. Keep it personal and genuine. Make them feel encouraged and motivated.
 
-Write in the SAME STYLE as these examples (use this as your model for tone and format):
+2. "segue": One transition phrase that flows directly from the praise into the corrections. Use straightforward language. For example: "To improve even further, try to be aware of the following errors which I noticed in your work." Do NOT use flowery language like "shine", "sparkle", "glow", or similar.
 
-- *Verb tense consistency:* Make sure to keep your verbs in the same tense throughout your writing. You wrote "I felt sad," but it should be "I #underline[feel] sad" to match your present thoughts. Remember, if you're talking about how you currently feel, use the present tense!
-- *Article usage:* Sometimes, you missed articles like "a" and "the." For example, you wrote "to be leader," but it should be "to be #underline[a] leader." Always check if you need "a" or "the" to make your sentences clearer.
-- *Subject-verb agreement:* Be careful that your subjects and verbs match in number. You wrote "my friend make me sure," but it should be "my friend #underline[makes] me sure." If you're talking about one friend, use the singular form of the verb.
+3. "errors": An array of exactly 3 objects, one for each of the most important error patterns found. Each object has:
+   - "name": Short, clear category name (e.g. "Verb tense consistency", "Article usage", "Subject-verb agreement")
+   - "rule": A simple rule the student can remember, written as a complete sentence
+   - "quote": An EXACT verbatim quote from the ORIGINAL TEXT showing the mistake. Must be copied character-for-character from the original text below.
+   - "correction": The corrected version of the quoted text (fix grammar/spelling only)
+
+Example of the errors array format:
+[
+  {{"name": "Verb tense consistency", "rule": "Keep your verbs in the same tense throughout.", "quote": "I felt sad", "correction": "I feel sad"}},
+  {{"name": "Article usage", "rule": "Use 'a' or 'the' before nouns.", "quote": "to be leader", "correction": "to be a leader"}},
+  {{"name": "Subject-verb agreement", "rule": "A singular subject needs a singular verb.", "quote": "my friend make me sure", "correction": "my friend makes me sure"}}
+]
 
 ORIGINAL TEXT:
 {original_text}
 
-CORRECTED TEXT (changes underlined):
+CORRECTED TEXT:
 {corrected_text}
 
-Write ONLY the feedback paragraph. Nothing else."""
+Return ONLY the JSON object."""
 
 
-def _verify_summary_examples(summary, original_text, corrected_text):
-    """Check that every quoted example actually exists in the original
-    or corrected text. Case-insensitive, punctuation-tolerant.
-    Strips Typst #underline[] markers before comparison.
+def _verify_structured_summary(summary_data, original_text, corrected_text):
+    """Verify that every quote in the structured summary exists in the original text.
     Returns list of warnings (empty = all clean)."""
     warnings = []
-    strip_ul = lambda t: re.sub(r'#underline\[(.*?)\]', r'\1', t)
-
+    
     def normalize(t):
-        """Lowercase, strip all punctuation and extra whitespace for fuzzy comparison."""
-        s = strip_ul(t).lower()
+        s = t.lower().strip()
         s = re.sub(r'[.,;:!?\'\"\u2018\u2019\u201c\u201d]+', '', s)
         s = re.sub(r'\s+', ' ', s).strip()
         return s
-
-    def fuzzy_in(needle, haystack):
-        """Check if needle appears in haystack, case-insensitive,
-        ignoring leading/trailing punctuation."""
-        n = normalize(needle)
-        h = normalize(haystack)
-        return n in h or needle.lower() in haystack.lower()
-
-    # Find all "You wrote "X"" quotes and check X is in original_text
-    you_wrote = re.findall(r'[Yy]ou wrote\s+["\u201c]([^"\u201d]+)["\u201d]', summary)
-    for q in you_wrote:
-        if not fuzzy_in(q, original_text):
-            warnings.append(f"H: '{q.strip()[:60]}...'")
-
-    # Find all "it is better to write "X"" quotes and check X stripped is in corrected_text
-    better_wrote = re.findall(r'it is better to write\s+["\u201c]([^"\u201d]+)["\u201d]', summary)
-    for q in better_wrote:
-        if not fuzzy_in(q, corrected_text):
-            warnings.append(f"H: '{q.strip()[:60]}...'")
-
+    
+    if not isinstance(summary_data, dict):
+        return ["summary_data is not a dict"]
+    
+    errors = summary_data.get("errors", [])
+    for i, err in enumerate(errors):
+        quote = err.get("quote", "")
+        if not quote:
+            warnings.append(f"Error {i}: empty quote")
+            continue
+        nq = normalize(quote)
+        no = normalize(original_text)
+        if nq not in no and quote.lower() not in original_text.lower():
+            warnings.append(f"E{i}: quote '{quote[:60]}' not found in original")
+    
     return warnings
 
 
-def generate_summary(output: dict) -> str | None:
+def render_summary_to_text(summary_data, name):
+    """Deterministically render structured summary data to readable text."""
+    if not isinstance(summary_data, dict):
+        return ""
+    praise = summary_data.get("praise", "")
+    segue = summary_data.get("segue", "")
+    errors = summary_data.get("errors", [])
+    
+    parts = [f"*Dear {name},*", "", praise, ""]
+    if segue:
+        parts.append(segue)
+        parts.append("")
+    
+    if errors:
+        parts.append("*Here are some areas to work on:*")
+        parts.append("")
+        for err in errors:
+            name_cat = err.get("name", "")
+            rule = err.get("rule", "")
+            quote = err.get("quote", "")
+            correction = err.get("correction", "")
+            parts.append(f"*{name_cat}:* {rule}")
+            parts.append(f"You wrote \"{quote},\" but it should be \"#underline[{correction}].\"")
+            parts.append("")
+    
+    return "\n".join(parts).strip()
+
+
+def generate_summary(output: dict) -> dict:
+    """Generate structured summary data from LLM.
+    Returns {"summary": rendered_text_str, "summary_data": dict}."""
     name = output.get("name", "student")
     original_text = output.get("original_text", "")
     corrected_typst = output.get("corrected_typst", output.get("corrected_text", ""))
@@ -399,34 +421,74 @@ def generate_summary(output: dict) -> str | None:
         corrected_text=corrected_typst,
     )
     result = call_model_custom(prompt, SUMMARY_TEMPERATURE, model=SUMMARY_MODEL)
-    if not result:
-        result = ""
-    result = _sanitize_unicode(result)
+    result = _sanitize_unicode(result or "")
+    
+    # Try to parse JSON from the response
+    summary_data = None
+    parsed = None
+    try:
+        parsed = json.loads(result)
+    except json.JSONDecodeError:
+        # Try to extract JSON from markdown fences
+        m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', result, re.DOTALL)
+        if m:
+            try:
+                parsed = json.loads(m.group(1))
+            except json.JSONDecodeError:
+                pass
+        if not parsed:
+            # Try to find JSON object in response
+            m = re.search(r'\{.*\}', result, re.DOTALL)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except json.JSONDecodeError:
+                    pass
+    
+    if isinstance(parsed, dict) and "praise" in parsed and "errors" in parsed:
+        summary_data = parsed
+        # Verify quotes
+        corrected_plain = output.get("corrected_text", "")
+        warnings = _verify_structured_summary(summary_data, original_text, corrected_plain)
+        if warnings:
+            for w in warnings[:3]:
+                tqdm.write(f"  Summary verification: {w}")
+            # Fall back to deterministic summary
+            return _build_deterministic_summary(output)
+        
+        rendered = render_summary_to_text(summary_data, name)
+        tqdm.write(f"  Summary generated ({len(summary_data.get('errors', []))} errors)")
+        return {"summary": rendered, "summary_data": summary_data}
+    
+    # LLM didn't return valid JSON — fallback
+    tqdm.write("  Could not parse structured summary, using deterministic fallback")
+    return _build_deterministic_summary(output)
 
-    # Deterministic verification: every quoted example must exist in the actual texts
-    corrected_plain = output.get("corrected_text", "")
-    warnings = _verify_summary_examples(result, original_text, corrected_plain)
-    if warnings:
-        for w in warnings[:3]:
-            tqdm.write(f"  Summary verification: {w}")
-        errors = output.get("errant_analysis", {}).get("errors", [])
-        return _build_deterministic_summary(output, errors[:3])
 
-    return result
-
-
-def _build_deterministic_summary(output, top_errors):
-    """Fully deterministic fallback - no LLM at all. Used when verification fails."""
+def _build_deterministic_summary(output):
+    """Fully deterministic fallback — no LLM at all. Used when JSON parsing fails."""
     name = output.get("name", "student")
-    points = []
-    for e in top_errors[:3]:
-        desc = human_error_type(e["type"])
-        etype = e["type"]
-        count = e.get("count", 1)
-        points.append(f"*{desc} ({etype}):* {count} time(s).")
-
-    bullet_text = "\n".join(f"{i+1}. {p}" for i, p in enumerate(points))
-    return f"Great work on your writing, {name}! Keep working on these areas to improve:\n\n{bullet_text}"
+    errors = output.get("errant_analysis", {}).get("errors", [])
+    top = errors[:3]
+    
+    summary_data = {
+        "praise": f"Great work on your writing, {name}! Keep up the good practice.",
+        "segue": "Here are some areas to focus on to improve your writing further.",
+        "errors": []
+    }
+    for e in top:
+        etype = e.get("type", "OTHER")
+        desc = human_error_type(etype)
+        example = e.get("example", "")
+        summary_data["errors"].append({
+            "name": desc,
+            "rule": f"Pay attention to {etype.lower()} errors.",
+            "quote": example if example else e.get("context_original", "")[:30],
+            "correction": "",
+        })
+    
+    rendered = render_summary_to_text(summary_data, name)
+    return {"summary": rendered, "summary_data": summary_data}
 
 
 def insert_error_reports(output: dict):
@@ -815,6 +877,8 @@ def process_file(file_path, nlp=None, annotator=None):
     student_id = data.get("student_id", "unknown")
     original_text = data.get("student_text", "").strip()
     word_count = data.get("word_count", 0)
+    if word_count == 0 and original_text:
+        word_count = len(original_text.split())
 
     if not original_text:
         tqdm.write("  Empty student_text, skipping.")
@@ -851,8 +915,8 @@ def process_file(file_path, nlp=None, annotator=None):
     # Use annotator.parse() (whitespace-split tokenization) for ERRANT alignment
     orig_parse = annotator.parse(original_text)
 
-    # ---- Step 1: Sentence-by-sentence correction via GPT-4.1-nano ----
-    corrected_text, llm_edits = correct_text(original_text, nlp)
+    # ---- Step 1: Whole-text correction via GPT-4.1-nano ----
+    corrected_text, llm_edits, _ = correct_text(original_text, nlp)
 
     corrected_text = corrected_text.strip()
     tqdm.write(f"  Corrected length: {len(corrected_text)} chars")
@@ -884,6 +948,7 @@ def process_file(file_path, nlp=None, annotator=None):
     # ---- Step 4: Build Typst markup and sentence pairs ----
     corrected_typst = build_corrected_typst(orig_parse, edits)
 
+    # Split both texts into sentences for alignment
     cor_sentences = [sent.text.strip() for sent in nlp(corrected_text).sents]
     sentence_pairs = align_sentences(orig_sentences, cor_sentences)
 
@@ -923,9 +988,11 @@ def _finalize_output(output, file_path):
     write_output(output, file_path)
     # Generate summary
     tqdm.write("  Generating summary...")
-    summary = generate_summary(output)
-    output["summary"] = summary or ""
-    tqdm.write(f"  Summary: {summary[:80] if summary else '(empty)'}...")
+    summary_result = generate_summary(output)
+    output["summary"] = summary_result.get("summary", "") if isinstance(summary_result, dict) else str(summary_result or "")
+    output["summary_data"] = summary_result.get("summary_data") if isinstance(summary_result, dict) and summary_result.get("summary_data") else None
+    preview = output["summary"][:80] if output["summary"] else "(empty)"
+    tqdm.write(f"  Summary: {preview}...")
     # Re-write with summary
     write_output(output, file_path)
     # Insert into Supabase

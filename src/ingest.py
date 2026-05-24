@@ -6,6 +6,7 @@ import json
 import time
 import random
 import base64
+import argparse
 from io import BytesIO
 from pathlib import Path
 from PIL import Image
@@ -14,11 +15,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from _retry import RetryableError, retry
 
-MAX_WORKERS = 5
-
 load_dotenv()
 
+try:
+    from supabase import create_client
+except ImportError:
+    create_client = None
+
+MAX_WORKERS = 5
+
 API_KEY = os.environ.get("OPENROUTER_API_KEY")
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_ESL_KEY")
+_supabase_client = None
 
 MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -32,6 +42,32 @@ JITTER_MIN = 0.5
 JITTER_MAX = 2.0
 MAX_RETRIES = 5
 REQUEST_TIMEOUT = 30
+
+
+def get_supabase_client():
+    global _supabase_client
+    if _supabase_client is None and create_client and SUPABASE_URL and SUPABASE_KEY:
+        _supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    return _supabase_client
+
+
+def lookup_student_info(student_id: str) -> dict:
+    """Look up student name and class from Supabase classlists table.
+    Returns dict with 'name' and 'class' keys (may be empty strings)."""
+    client = get_supabase_client()
+    if not client:
+        return {"name": "", "class": ""}
+    try:
+        result = client.table("classlists") \
+            .select("name, class") \
+            .eq("student_id", student_id) \
+            .execute()
+        if result.data:
+            row = result.data[0]
+            return {"name": row.get("name", ""), "class": row.get("class", "")}
+    except Exception:
+        pass
+    return {"name": "", "class": ""}
 
 
 SYSTEM_PROMPT = """You are a handwriting transcription tool. Your task is to transcribe handwritten English essays EXACTLY as written — preserve ALL spelling, grammar, and vocabulary errors. You are a transcriber, NOT a proofreader. Do not correct anything.
@@ -238,10 +274,21 @@ def process_student_group(group, folder_name):
 
     combined_text = " ".join(page_texts)
     final_id = extracted_id or student_id
+    word_count = len(combined_text.split())
+
+    # Look up student name and class from Supabase
+    student_info = lookup_student_info(final_id)
+    if student_info["name"]:
+        print(f"    Found student: {student_info['name']} ({student_info['class']})")
+    else:
+        print(f"    Student {final_id} not in classlist (M3 cohort or unknown)")
 
     output = {
         "student_id": final_id,
         "student_text": combined_text,
+        "word_count": word_count,
+        "name": student_info["name"],
+        "class": student_info["class"],
         "source_images": [p.name for p in page_paths],
     }
 
@@ -256,19 +303,60 @@ def process_student_group(group, folder_name):
     return {"student_id": final_id, "pages": len(page_paths), "text_len": len(combined_text)}
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Transcribe handwritten essays from images.")
+    parser.add_argument("--folder", help="Folder name or index number (e.g. 'M2-5A BASELINE' or '2')")
+    parser.add_argument("--pages", type=int, help="Number of images per essay (e.g. 2)")
+    return parser.parse_args()
+
+
+def resolve_folder(folders, folder_arg: str) -> Path | None:
+    """Resolve --folder arg to a Path. Accepts index or name substring."""
+    # Try numeric index
+    try:
+        idx = int(folder_arg) - 1
+        if 0 <= idx < len(folders):
+            return folders[idx]
+    except ValueError:
+        pass
+    # Try case-insensitive name match
+    folder_lower = folder_arg.lower()
+    for f in folders:
+        if f.name.lower() == folder_lower:
+            return f
+    # Try substring match
+    for f in folders:
+        if folder_lower in f.name.lower():
+            return f
+    return None
+
+
 def main():
     if not API_KEY:
         print("Error: OPENROUTER_API_KEY not set. Add it to .env or export it.")
         sys.exit(1)
 
+    args = parse_args()
     folders = find_input_folders()
     if not folders:
         print(f"No subfolders found in {INPUTS_DIR}/")
         print(f"Create subdirectories there with your images (e.g. {INPUTS_DIR}/class_a/12345_1.jpg)")
         sys.exit(1)
 
-    selected = show_menu(folders)
-    pages_per_essay = ask_page_count()
+    if args.folder:
+        selected = resolve_folder(folders, args.folder)
+        if not selected:
+            print(f"Error: folder '{args.folder}' not found. Available folders:")
+            for f in folders:
+                print(f"  {f.name}")
+            sys.exit(1)
+    else:
+        selected = show_menu(folders)
+
+    if args.pages:
+        pages_per_essay = args.pages
+    else:
+        pages_per_essay = ask_page_count()
 
     print(f"\nProcessing folder: {selected.name}")
     print(f"Pages per essay: {pages_per_essay}")

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Generate Typst report booklets from ERRANT analysis outputs."""
 import os
 import re
@@ -228,17 +227,80 @@ def build_typ_header():
     return "\n".join(lines)
 
 
+def _underline_changes(quote_raw, correction_raw):
+    """Return correction text with only changed words wrapped in #underline[].
+    Uses word-level diff between quote and correction to identify changed tokens."""
+    import difflib
+    q_tokens = quote_raw.split()
+    c_tokens = correction_raw.split()
+    
+    matcher = difflib.SequenceMatcher(None, q_tokens, c_tokens)
+    result = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            # Unchanged words — no underline
+            for t in c_tokens[j1:j2]:
+                result.append(esc_typst_markup(t))
+        elif tag == "replace":
+            # Changed words — underline each
+            for t in c_tokens[j1:j2]:
+                result.append(f"#underline[{esc_typst_markup(t)}]")
+        elif tag == "insert":
+            # Inserted words — underline
+            for t in c_tokens[j1:j2]:
+                result.append(f"#underline[{esc_typst_markup(t)}]")
+        elif tag == "delete":
+            # Deleted from original — not shown
+            pass
+    return " ".join(result)
+
+
+def render_structured_summary(summary_data):
+    """Deterministically render structured summary_data dict to Typst markup."""
+    if not isinstance(summary_data, dict):
+        return ""
+    
+    parts = []
+    errors = summary_data.get("errors", [])
+    for err in errors:
+        name_cat = esc_typst_markup(err.get("name", ""))
+        rule = esc_typst_markup(err.get("rule", ""))
+        quote_raw = err.get("quote", "")
+        correction_raw = err.get("correction", "")
+        # Strip trailing punctuation from raw strings to avoid doubling
+        quote_raw = quote_raw.rstrip(".,;:!?\"")
+        correction_raw = correction_raw.rstrip(".,;:!?")
+        quote = esc_typst_markup(quote_raw)
+        marked_correction = _underline_changes(quote_raw, correction_raw)
+        parts.append(f"- *{name_cat}:* {rule} You wrote \"{quote}\" but it should be \"{marked_correction}.\"")
+    
+    return "\n".join(parts)
+
+
 def build_student_block(student, idx):
     sid = student["student_id"]
     raw_name = student.get("name", sid)
     name = esc(raw_name)
     cls = esc(student.get("class", ""))
-    summary = student.get("summary", "No summary available.")
-    # Clean summary: sanitize unicode, no ERRANT codes in new format
-    summary = _sanitize_unicode(summary)
-    summary = _strip_salutation(summary, raw_name)
-    summary = _replace_errant_codes(summary)
-    summary = esc(summary)
+    
+    # Use structured summary_data if available, else fall back to plain summary text
+    summary_data = student.get("summary_data")
+    if isinstance(summary_data, dict) and summary_data.get("errors"):
+        summary_praise = summary_data.get("praise", "")
+        summary_praise = esc_typst_markup(summary_praise)
+        # Append segue directly to praise (same paragraph, not separate)
+        segue = summary_data.get("segue", "")
+        if segue:
+            summary_praise += " " + esc_typst_markup(segue)
+        summary_rendered = render_structured_summary(summary_data)
+    else:
+        # Fallback: legacy plain text summary
+        summary_fallback = student.get("summary", "No summary available.")
+        summary_fallback = _sanitize_unicode(summary_fallback)
+        summary_fallback = _strip_salutation(summary_fallback, raw_name)
+        summary_fallback = _replace_errant_codes(summary_fallback)
+        summary_praise = esc_typst_markup(summary_fallback)
+        summary_rendered = ""
 
     level = _infer_cefr_level(student.get("class", ""))
     target = B1_TARGET if level == "B1" else B2_TARGET
@@ -267,7 +329,7 @@ def build_student_block(student, idx):
     lines.append('')
 
     lines.append('#align(center, text(size: 16pt, weight: "bold")[Writing Accuracy Feedback Report])')
-    lines.append(f'#align(center, text(size: 11pt)[{raw_name} - {sid} - {cls}])')
+    lines.append(f'#align(center, text(size: 12pt)[{raw_name} - {sid} - {cls}])')
     lines.append("")
     lines.append("#v(1em)")
     lines.append("")
@@ -275,28 +337,34 @@ def build_student_block(student, idx):
     lines.append("")
     lines.append("#v(0.5em)")
     lines.append("")
-    lines.append(summary)
+    if summary_praise:
+        lines.append(summary_praise)
+        lines.append("")
+        lines.append("#v(0.5em)")
+        lines.append("")
+    if summary_rendered:
+        lines.append(summary_rendered)
     lines.append("")
     lines.append("#v(1em)")
     lines.append("")
-    # Boilerplate target explanation
-    lines.append('#align(center)[')
-    lines.append(f'  #text(size: 11pt)[The solid line in the chart below shows the {level} target error rate ({target}%). Your goal is to keep your error rate below this line. The chart tracks your progress over time.]')
-    lines.append("]")
+    # Boilerplate target explanation — left aligned, keep with chart
+    lines.append('#block(breakable: false)[')
+    lines.append(f'  #text(size: 12pt)[The solid line in the chart below shows the {level} target error rate ({target}%). Your goal is to keep your error rate below this line. The chart tracks your progress over time.]')
     lines.append("")
     lines.append("#v(0.5em)")
     lines.append("")
-    lines.append('#align(center)[')
-    lines.append('  #image("/outputs/charts/' + sid + '.png", width: 80%)')
+    lines.append('#image("/outputs/charts/' + sid + '.png", width: 80%)')
     lines.append("]")
     lines.append("")
     lines.append('#v(1em)')
     lines.append("")
     lines.append("#pagebreak()")
     lines.append("")
-    lines.append('#align(center, text(size: 16pt, weight: "bold")[Your Writing with Corrections])')
-    lines.append('#text(size: 11pt)[I scanned your writing for errors and underlined the corrections below. Carefully comparing the corrected and original versions will help you become more aware of common mistakes\\')
-    lines.append('and improve your writing skills.]')
+    lines.append("#v(0.5em)")
+    lines.append("")
+    lines.append('#text(size: 16pt, weight: "bold")[Your Writing with Corrections]')
+    lines.append("")
+    lines.append('#text(size: 12pt)[I scanned your writing for errors and underlined the corrections below. Carefully comparing the corrected and original versions will help you become more aware of common mistakes and improve your writing skills.]')
     lines.append("")
     lines.append("#v(0.5em)")
     lines.append("")
@@ -304,12 +372,22 @@ def build_student_block(student, idx):
     lines.append("")
     lines.append("#v(2em)")
     lines.append("")
-    lines.append('#align(center, text(size: 16pt, weight: "bold")[Your Original Writing (Uncorrected)])')
-    lines.append('#align(center, text(size: 11pt)[Below is your original writing exactly as you submitted it, before any corrections were applied. Compare it with the corrected version above.])')
+    lines.append('#text(size: 16pt, weight: "bold")[Your Original Writing (Uncorrected)]')
+    lines.append("")
+    lines.append('#text(size: 12pt)[Below is your original writing exactly as you submitted it, before any corrections were applied. Compare it with the corrected version above.]')
     lines.append("")
     lines.append("#v(0.5em)")
     lines.append("")
     lines.append(orig_escaped)
+    lines.append("")
+    lines.append("#v(2em)")
+    lines.append("")
+    today_str = date.today().strftime("%B %d, %Y")
+    lines.append('#text(size: 12pt)[' + today_str + ']')
+    lines.append("")
+    lines.append('#text(size: 12pt)[Sincerely,]')
+    lines.append("")
+    lines.append('#text(size: 12pt, weight: "bold")[Teacher Ed]')
     lines.append("")
     # Pad to exactly 4 pages: zero-width invisible anchor + blank pages
     lines.append(f'#box(width: 0pt) <pad-anchor-{idx}>')
