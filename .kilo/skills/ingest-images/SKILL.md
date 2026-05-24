@@ -73,6 +73,40 @@ Both arguments are optional. When omitted, the script falls back to interactive 
 
 Use the `question` tool to gather `--folder` and `--pages` from the user, then run the script with those arguments. The script processes each student's pages with jitter between requests and writes output JSONs to `outputs/{folder_name}/{student_id}.json`.
 
+### ID verification sign-off (MANDATORY)
+
+After ingestion completes, you **must** verify all extracted student IDs with the human before proceeding to any downstream step (ERRANT analysis, Supabase upload, report generation).
+
+1. **Build the mapping** — After the script finishes, retrieve the `source_images` from each output JSON and the corresponding `student_id` to produce a complete image→ID map. Use:
+   ```bash
+   Get-ChildItem "outputs/{folder}/*.json" | ForEach-Object {
+     $data = Get-Content $_ | ConvertFrom-Json
+     "$($data.source_images[0]) -> $($data.student_id) ($($data.name))"
+   }
+   ```
+
+2. **Highlight problems** — Identify any student IDs that are NOT in the Supabase classlist (those with empty `name` and `class` fields). Flag them as potential misreads.
+
+3. **Present to user** — Use the `question` tool to show the full mapping and ask for confirmation or corrections. Example:
+   ```
+   Ingested 16 files from M2-4A BASELINE:
+     img-0001.jpg → 30570 (Aton)
+     img-0002.jpg → 36127 (Pang Pang)
+     ...
+     img-0005.jpg → 36717 (?? NOT in classlist)
+     img-0009.jpg → 38995 (?? NOT in classlist)
+
+   2 IDs not found in classlist (may be misreads or missing from roster):
+     img-0005.jpg → 36717
+     img-0009.jpg → 38995
+
+   Do any IDs need correcting?
+   ```
+
+4. **Apply corrections** — If the user corrects an ID, update the ingestion JSON file immediately (rename file and fix `student_id`, `name`, `class` fields).
+
+5. **Proceed only after sign-off** — Do not run ERRANT analysis, Supabase uploads, or report generation until the user has confirmed the IDs are correct.
+
 ## Output Format
 
 One JSON file per student. Multi-page essays have their pages joined with a single space.
@@ -138,3 +172,8 @@ Multi-page essays are joined with a single space (`" "`) between pages, never wi
 - **Backoff**: exponential (2^n + random) on 429/502/503, up to 5 retries
 - **Timeout**: 30s per request
 - **Concurrency**: serial (one request at a time)
+
+## Pipeline handoff
+
+After the user signs off on the IDs, the pipeline proceeds to ERRANT analysis.
+Do **not** skip the ID verification step — misread student IDs are the most common source of downstream errors.

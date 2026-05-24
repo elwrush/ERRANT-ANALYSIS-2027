@@ -34,7 +34,8 @@ class TestTypContent:
         assert "Writing Accuracy Feedback Report" in result
         assert "*Dear Test,*" in result
         assert 'pad-anchor-0' in result
-        assert 'pagebreak()' in result
+        assert 'rest-pages-0' in result
+        assert 'state("rest-pages-0", 0)' in result
         assert 'Mathayom Program' in result
         assert 'ACT.png' in result
         assert 'cambridge.png' in result

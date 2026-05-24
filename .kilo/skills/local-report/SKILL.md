@@ -21,9 +21,8 @@ python src/generate_report.py "FOLDER_NAME"
 
 ## Output
 
-- `PDF/{folder}/{dd-mm-yy}-{class}-combined.pdf` — compiled booklet
+- `PDF/{folder}/{dd-mm-yy}-{class}-combined.pdf` — compiled booklet (individual per-student PDFs compiled separately then merged)
 - `outputs/charts/{student_id}.png` — per-student error rate chart
-- `outputs/{folder}/{dd-mm-yy}-{class}-combined.typ` — Typst source
 
 ## Prerequisites
 

@@ -354,12 +354,11 @@ def build_student_block(student, idx):
     lines.append("#v(0.5em)")
     lines.append("")
     lines.append('#image("/outputs/charts/' + sid + '.png", width: 80%)')
-    lines.append("]")
+    lines.append(']')
     lines.append("")
     lines.append('#v(1em)')
     lines.append("")
-    lines.append("#pagebreak()")
-    lines.append("")
+    # NO pagebreak here — content flows naturally from chart to corrections
     lines.append("#v(0.5em)")
     lines.append("")
     lines.append('#text(size: 16pt, weight: "bold")[Your Writing with Corrections]')
@@ -389,11 +388,21 @@ def build_student_block(student, idx):
     lines.append("")
     lines.append('#text(size: 12pt, weight: "bold")[Teacher Ed]')
     lines.append("")
-    # Pad to exactly 4 pages: zero-width invisible anchor + blank pages
+    # Pad to exactly 4 pages: state-stabilised two-context-block approach.
+    # First context calculates needed pages and stores in state (final value).
+    # Second context reads the stable value and inserts pages via page([]).
+    # A pagebreak(weak: true) between blocks handles the rem=0 edge case
+    # without causing layout oscillations (pagebreak fires when page has content,
+    # skips when empty — only fires when padding is 0 and content fills the last page).
+    lines.append(f'#let rest-pages-{idx} = state("rest-pages-{idx}", 0)')
     lines.append(f'#box(width: 0pt) <pad-anchor-{idx}>')
     lines.append('#context {')
     lines.append(f'  let num = counter(page).at(label("pad-anchor-{idx}")).first()')
-    lines.append('  for _ in range(calc.rem-euclid(4 - num, 4)) {')
+    lines.append('  let rem = calc.rem-euclid(4 - num, 4)')
+    lines.append(f'  rest-pages-{idx}.update(rem)')
+    lines.append('}')
+    lines.append('#context {')
+    lines.append(f'  for _ in range(rest-pages-{idx}.final()) {{')
     lines.append('    page([])')
     lines.append('  }')
     lines.append('}')
@@ -553,45 +562,67 @@ def main():
         print("No students to process.")
         sys.exit(1)
 
-    # Build single combined typst document
-    all_blocks = [build_typ_header()]
-    for idx, student in enumerate(students):
-        all_blocks.append(build_student_block(student, idx))
-
-    typ_content = "\n".join(all_blocks)
-
     safe_class = class_name.replace("/", "-").replace("\\", "-")
-    typ_filename = f"{today}-{safe_class}-combined.typ"
-    pdf_filename = f"{today}-{safe_class}-combined.pdf"
-
     folder_output = OUTPUTS_DIR / (folder_name or safe_class)
     folder_output.mkdir(parents=True, exist_ok=True)
-    typ_path = folder_output / typ_filename
-
-    with open(typ_path, "w", encoding="utf-8") as f:
-        f.write(typ_content)
-    print(f"\nTypst source: {typ_path}")
-
     pdf_dir = PDF_DIR / (folder_name or safe_class)
     pdf_dir.mkdir(parents=True, exist_ok=True)
-    pdf_path = pdf_dir / pdf_filename
 
-    generated = 0
-    try:
+    # Build and compile each student as a standalone 4-page PDF, then concatenate
+    single_pdfs = []
+    for idx, student in enumerate(students):
+        sid = student["student_id"]
+        header = build_typ_header()
+        block = build_student_block(student, idx)
+        typ_content = header + "\n" + block
+
+        typ_path = folder_output / f"{today}-{safe_class}-{sid}.typ"
+        pdf_path = pdf_dir / f"{today}-{safe_class}-{sid}.pdf"
+        with open(typ_path, "w", encoding="utf-8") as f:
+            f.write(typ_content)
+
         result = subprocess.run(
             ["typst", "compile", "--root", ".", str(typ_path), str(pdf_path)],
             capture_output=True, text=True, timeout=120
         )
         if result.returncode == 0:
-            print(f"  PDF: {pdf_path}")
-            generated = 1
+            single_pdfs.append(str(pdf_path))
+            typ_path.unlink()  # delete .typ file
+            print(f"  PDF ({idx+1}/{len(students)}): {pdf_path.name}")
         else:
-            print(f"  Typst error: {result.stderr[:500]}")
-    except Exception as e:
-        print(f"  Compilation failed: {e}")
+            print(f"  Error compiling {sid}: {result.stderr[:200]}")
+
+    # Concatenate all single PDFs into one combined PDF
+    if single_pdfs:
+        combined_pdf = pdf_dir / f"{today}-{safe_class}-combined.pdf"
+        try:
+            import pypdf
+            merger = pypdf.PdfWriter()
+            for p in single_pdfs:
+                merger.append(p)
+            merger.write(combined_pdf)
+            merger.close()
+            print(f"\nCombined PDF: {combined_pdf} ({len(single_pdfs)} students)")
+            # Delete individual PDFs
+            for p in single_pdfs:
+                os.unlink(p)
+        except ImportError:
+            # Fallback: try pdftk
+            r = subprocess.run(
+                ["pdftk"] + single_pdfs + ["cat", "output", str(combined_pdf)],
+                capture_output=True, text=True, timeout=60
+            )
+            if r.returncode == 0:
+                print(f"\nCombined PDF (pdftk): {combined_pdf}")
+                for p in single_pdfs:
+                    os.unlink(p)
+            else:
+                print(f"\nCombined PDF not created — individual PDFs left in {pdf_dir}/")
+    else:
+        print("\nNo PDFs were generated.")
 
     print(f"\n{'='*50}")
-    print(f"Done. Generated {generated} file(s) with {len(students)} student(s) in {PDF_DIR}/")
+    print(f"Done. {len(single_pdfs)} student(s) in {pdf_dir}/")
     print(f"{'='*50}")
 
 

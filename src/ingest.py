@@ -353,10 +353,7 @@ def main():
     else:
         selected = show_menu(folders)
 
-    if args.pages:
-        pages_per_essay = args.pages
-    else:
-        pages_per_essay = ask_page_count()
+    pages_per_essay = args.pages or ask_page_count()
 
     print(f"\nProcessing folder: {selected.name}")
     print(f"Pages per essay: {pages_per_essay}")

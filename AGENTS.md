@@ -2,7 +2,7 @@
 
 ## Project: ERRANT-ANALYSIS
 
-Pipelines student handwriting images through OCR transcription (Gemini via OpenRouter), ERRANT grammatical error analysis, Supabase storage, and report generation.
+Full ERRANT analysis pipeline: ingests student handwriting images via OCR transcription (Gemini via OpenRouter), runs grammatical error analysis with DeepSeek V4 Flash + ERRANT, uploads structured reports to Supabase, and generates Typst report booklets with PDF output.
 
 ## Shell: Windows PowerShell 5.1
 
@@ -36,8 +36,9 @@ This project runs on Windows PowerShell 5.1.
 
 | Variable | Purpose | Set? |
 |----------|---------|------|
-| `OPENAI_API_KEY` | LLM API for corrections & summaries | ✅ |
-| `OPENROUTER_API_KEY` | Fallback if OpenAI direct unavailable | ✅ |
+| `DEEPSEEK_API_KEY` | Correction & summary via deepseek-v4-flash (DeepSeek API direct) | ✅ |
+| `OPENROUTER_API_KEY` | Ingestion (OpenRouter) only | ✅ |
+| `OPENAI_API_KEY` | (not used — kept for backward compatibility) | - |
 | `CONTEXT7_API_KEY` | Context7 API key for library doc lookup (via `/context7` global skill) | ✅ |
 | `TAVILY_API_KEY` | Tavily web search | ✅ |
 | `SUPABASE_URL` | Supabase project URL | as needed |
@@ -45,13 +46,13 @@ This project runs on Windows PowerShell 5.1.
 
 ## Models (current)
 
-| Role | Model | Cost/M in | Cost/M out |
-|------|-------|-----------|------------|
-| Correction | `gpt-4o-mini` | $0.15 | $0.60 |
-| Summary | `gpt-4o-mini` | $0.15 | $0.60 |
-| Ingestion | `google/gemini-2.5-flash-lite-preview-09-2025` | | |
+| Role | Model | Provider | Cost/M in | Cost/M out |
+|------|-------|----------|-----------|------------|
+| Correction | `deepseek-v4-flash` | DeepSeek API | $0.14 | $0.28 |
+| Summary | `deepseek-v4-flash` | DeepSeek API | $0.14 | $0.28 |
+| Ingestion | `google/gemini-2.5-flash-lite-preview-09-2025` | OpenRouter | | |
 
-Correction runs at 2 temperatures (0.1, 0.5) with edit-level majority voting (both must agree). Summary runs at 0.8. Both use the OpenAI direct API. Full pipeline cost: ~$0.00039 per student.
+Correction runs at temperature 0.1 (minimal edits). Summary runs at 0.8 (non-thinking mode). Full pipeline cost: ~$0.00039 per student.
 
 ## Context7 documentation lookup
 
@@ -106,6 +107,8 @@ pytest tests/ -v
 - Source table: `student_submissions` in Supabase (filter: skill='Writing') (each row = one essay submission)
 - Sampling plan: `sampling_strategy.py` → `local-working/sampling_plan.json`
 - Research prep: `research_prep.py` → `outputs/research/{record_id}.json`
+- Ingestion: `ingest.py` → `outputs/{folder}/{student_id}.json`
+- **ID verification (MANDATORY sign-off):** After ingestion, the agent must present the image→ID mapping to the human for confirmation. Only after sign-off does the pipeline proceed.
 - ERRANT analysis: `errant_analysis.py` → `local-working/{folder}-{record_id}.json`
 
 **Class-label convention (critical — DO NOT misinterpret):**
@@ -122,7 +125,7 @@ All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the Su
 - Research prep output: `outputs/research/{record_id}.json` with per-record metadata (one file per student writing submission)
 - ERRANT output: `local-working/{folder}-{record_id}.json` with full error analysis, sentence pairs, Typst-native `corrected_typst` field, metadata, and record metadata
 - Multi-page essays combined into a single JSON, pages joined with `\n`
-- API key: `OPENAI_API_KEY` in `.env` or environment; `OPENROUTER_API_KEY` as fallback
+- API key: `DEEPSEEK_API_KEY` in `.env` or environment; `OPENROUTER_API_KEY` for ingestion
 
 ## Transcription rules (enforced by prompt)
 

@@ -272,7 +272,7 @@ class TestMetadata:
     def test_basic_metadata_shape(self):
         from errant_analysis import build_metadata
         meta = build_metadata([], "corrected", "original")
-        assert meta["model"] == "gpt-4.1-nano"
+        assert meta["model"] == "deepseek-v4-flash"
         assert meta["identity_check"] is False
         assert meta["total_edit_count"] == 0
         assert meta["overcorrection_count"] == 0

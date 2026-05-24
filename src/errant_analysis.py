@@ -16,37 +16,40 @@ from rapidfuzz.distance import Levenshtein
 
 load_dotenv(override=True)
 
-API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 
-CORRECTION_MODEL = "gpt-4.1-nano"
-SUMMARY_MODEL = "gpt-4o-mini"
+CORRECTION_MODEL = "deepseek-v4-flash"
+SUMMARY_MODEL = "deepseek-v4-flash"
 
-# Force direct OpenAI  -  the system may have OPENAI_BASE_URL set to OpenRouter
-# Reusable client with SDK retries disabled (we handle retry via _retry decorator)
-_client = OpenAI(api_key=API_KEY, base_url="https://api.openai.com/v1", max_retries=0)
+# Single DeepSeek client for both correction and summary
+_client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com", max_retries=0)
 
 OUTPUTS_DIR = Path("outputs")
 LOCAL_WORKING_DIR = Path("local-working")
 
 TEMPERATURE = 0.1
-MAX_RETRIES = 3
-REQUEST_TIMEOUT = 45
+MAX_RETRIES = 5
+REQUEST_TIMEOUT = 60
 MULTI_TOKEN_THRESHOLD = 3
 SUMMARY_TEMPERATURE = 0.8
 MAX_WORKERS = 5
-MAX_OUTPUT_TOKENS = 1024
+MAX_OUTPUT_TOKENS = 4096
 MISSING_STUDENT_IDS: dict[str, list[str]] = {}
 
-# Whole-text correction prompt — preserves every word, only fixes grammar/spelling
-CORRECTION_PROMPT = """Fix ONLY grammar and spelling in the text below.
+# Whole-text correction prompt — minimal edits: fix errors, don't rewrite
+CORRECTION_PROMPT = """Fix ONLY grammar, spelling, and capitalization errors in the text below. Do NOT rewrite the text or change style.
 
 CRITICAL RULES:
 - Do NOT delete words unless clearly duplicated or wrong (e.g. "world wide" → "worldwide")
 - Do not reorder, restructure, or rephrase
 - Do not merge or split sentences
-- Preserve all original quotes, paragraph breaks, and most punctuation
+- Fix capitalization: sentence starts, proper nouns, pronoun "I"
+- Fix punctuation to academic English standards: no fused sentences, run-ons, comma splices, or stringy sentences. Use periods or semicolons to separate independent clauses.
+- Fix missing words: add auxiliary verbs, articles, prepositions when needed
+- Fix word forms: use correct adverb forms ("good" → "well"), verb forms ("help with putting" → "help put"), pluralization, etc.
+- Preserve original paragraph breaks
 - Convert & to "and" where it represents the word "and"
-- Only change: verb tense, subject-verb agreement, articles, prepositions, spelling, punctuation, & → and
+- Only change: verb tense, subject-verb agreement, articles, prepositions, spelling, capitalization, punctuation, word forms, missing words, & → and
 
 Original text:
 {text}
@@ -151,27 +154,33 @@ def correct_text(original_text, nlp_model):
 
 
 def call_model_custom(prompt_content, temperature=TEMPERATURE, model=None):
-    return _call_api(prompt_content, temperature, model=model)
+    return _call_api(prompt_content, temperature, model=model, thinking=False)
 
 
 @retry(max_retries=MAX_RETRIES)
-def _call_api(content, temperature, model=None):
+def _call_api(content, temperature, model=None, thinking=None):
+    """Call the OpenRouter API with configurable thinking mode.
+    thinking=None: use model default (correction — let the model decide)
+    thinking=False: disable thinking (summary — avoid consuming token budget on reasoning)"""
     if not API_KEY:
-        tqdm.write("  Error: no API key found (set OPENAI_API_KEY in .env)")
+        tqdm.write("  Error: no API key found (set DEEPSEEK_API_KEY in .env)")
         return None
 
     model_name = model if model else CORRECTION_MODEL
 
     try:
-        r = _client.chat.completions.create(
-            model=model_name,
-            temperature=temperature,
-            messages=[
+        kwargs = {
+            "model": model_name,
+            "temperature": temperature,
+            "messages": [
                 {"role": "system", "content": content},
             ],
-            max_tokens=MAX_OUTPUT_TOKENS,
-            timeout=REQUEST_TIMEOUT,
-        )
+            "max_tokens": MAX_OUTPUT_TOKENS,
+            "timeout": REQUEST_TIMEOUT,
+        }
+        if thinking is not None:
+            kwargs["extra_body"] = {"thinking": {"type": "enabled" if thinking else "disabled"}}
+        r = _client.chat.completions.create(**kwargs)
         result = r.choices[0].message.content
         if result:
             return result.strip()
@@ -179,7 +188,7 @@ def _call_api(content, temperature, model=None):
     except (RateLimitError, APIConnectionError, APITimeoutError, InternalServerError):
         raise RetryableError("API error")
     except AuthenticationError:
-        tqdm.write("  Error: invalid API key")
+        tqdm.write("  Error: invalid OpenRouter API key")
         return None
     except BadRequestError as e:
         tqdm.write(f"  Error: bad request  -  {e}")
@@ -325,15 +334,15 @@ SUMMARY_PROMPT_FMT = """Analyze the writing of {name}, a Thai middle-school ESL 
 
 Return ONLY a JSON object with these exact keys (no markdown, no code fences, no extra text):
 
-1. "praise": 2-3 sentences of warm, specific praise about their writing - mention something concrete they wrote about. Keep it personal and genuine. Make them feel encouraged and motivated.
+1. "praise": 2-3 sentences of warm, specific praise about their writing - mention something concrete they wrote about. Keep it personal and genuine. Make them feel encouraged and motivated. Use simple, direct language. Do NOT use flowery or gushing language — banned words include: shine, shines, sparkle, glow, radiate, gleam, brilliant, wonderful (except as simple "It's wonderful that you..."), amazing, incredible.
 
-2. "segue": One transition phrase that flows directly from the praise into the corrections. Use straightforward language. For example: "To improve even further, try to be aware of the following errors which I noticed in your work." Do NOT use flowery language like "shine", "sparkle", "glow", or similar.
+2. "segue": One transition phrase that flows directly from the praise into the corrections. Use straightforward, direct language. For example: "To improve even further, try to be aware of the following errors which I noticed in your work." Do NOT use flowery language like "shine", "sparkle", "glow", "shines through", or similar.
 
 3. "errors": An array of exactly 3 objects, one for each of the most important error patterns found. Each object has:
    - "name": Short, clear category name (e.g. "Verb tense consistency", "Article usage", "Subject-verb agreement")
    - "rule": A simple rule the student can remember, written as a complete sentence
    - "quote": An EXACT verbatim quote from the ORIGINAL TEXT showing the mistake. Must be copied character-for-character from the original text below.
-   - "correction": The corrected version of the quoted text (fix grammar/spelling only)
+   - "correction": The corrected version of the quoted text (fix grammar/spelling only). Must match the ACTUAL correction in the CORRECTED TEXT below — do not paraphrase or rephrase. The corrected version must appear character-for-character in the CORRECTED TEXT.
 
 Example of the errors array format:
 [
@@ -352,7 +361,8 @@ Return ONLY the JSON object."""
 
 
 def _verify_structured_summary(summary_data, original_text, corrected_text):
-    """Verify that every quote in the structured summary exists in the original text.
+    """Verify that every quote in the structured summary exists in the original text,
+    and that every proposed correction exists in the corrected text.
     Returns list of warnings (empty = all clean)."""
     warnings = []
     
@@ -368,13 +378,21 @@ def _verify_structured_summary(summary_data, original_text, corrected_text):
     errors = summary_data.get("errors", [])
     for i, err in enumerate(errors):
         quote = err.get("quote", "")
+        correction = err.get("correction", "")
+        
         if not quote:
             warnings.append(f"Error {i}: empty quote")
-            continue
-        nq = normalize(quote)
-        no = normalize(original_text)
-        if nq not in no and quote.lower() not in original_text.lower():
-            warnings.append(f"E{i}: quote '{quote[:60]}' not found in original")
+        else:
+            nq = normalize(quote)
+            no = normalize(original_text)
+            if nq not in no and quote.lower() not in original_text.lower():
+                warnings.append(f"E{i}: quote '{quote[:60]}' not found in original")
+        
+        if correction:
+            nc = normalize(correction)
+            ncorr = normalize(corrected_text)
+            if nc not in ncorr and correction.lower() not in corrected_text.lower():
+                warnings.append(f"E{i}: correction '{correction[:60]}' not found in corrected text")
     
     return warnings
 
@@ -412,82 +430,208 @@ def generate_summary(output: dict) -> dict:
     Returns {"summary": rendered_text_str, "summary_data": dict}."""
     name = output.get("name", "student")
     original_text = output.get("original_text", "")
-    corrected_typst = output.get("corrected_typst", output.get("corrected_text", ""))
+    corrected_text = output.get("corrected_text", "")
 
     prompt = SUMMARY_PROMPT_FMT.format(
         name=name,
         error_rate=output["error_rate"],
         original_text=original_text,
-        corrected_text=corrected_typst,
+        corrected_text=corrected_text,
     )
-    result = call_model_custom(prompt, SUMMARY_TEMPERATURE, model=SUMMARY_MODEL)
+    result = _call_api(prompt, SUMMARY_TEMPERATURE, model=SUMMARY_MODEL, thinking=False)
     result = _sanitize_unicode(result or "")
     
     # Try to parse JSON from the response
     summary_data = None
     parsed = None
+    import contextlib
     try:
         parsed = json.loads(result)
     except json.JSONDecodeError:
         # Try to extract JSON from markdown fences
         m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', result, re.DOTALL)
         if m:
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 parsed = json.loads(m.group(1))
-            except json.JSONDecodeError:
-                pass
         if not parsed:
             # Try to find JSON object in response
             m = re.search(r'\{.*\}', result, re.DOTALL)
             if m:
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     parsed = json.loads(m.group(0))
-                except json.JSONDecodeError:
-                    pass
     
     if isinstance(parsed, dict) and "praise" in parsed and "errors" in parsed:
         summary_data = parsed
-        # Verify quotes
+        # Verify quotes and corrections
         corrected_plain = output.get("corrected_text", "")
         warnings = _verify_structured_summary(summary_data, original_text, corrected_plain)
         if warnings:
             for w in warnings[:3]:
                 tqdm.write(f"  Summary verification: {w}")
-            # Fall back to deterministic summary
+            tqdm.write("  Falling back to local probabilistic rewrite (LLM output failed verification)")
             return _build_deterministic_summary(output)
         
         rendered = render_summary_to_text(summary_data, name)
         tqdm.write(f"  Summary generated ({len(summary_data.get('errors', []))} errors)")
+        output["summary_type"] = "llm"
         return {"summary": rendered, "summary_data": summary_data}
     
     # LLM didn't return valid JSON — fallback
-    tqdm.write("  Could not parse structured summary, using deterministic fallback")
+    tqdm.write("  Could not parse structured summary, using local probabilistic rewrite")
     return _build_deterministic_summary(output)
 
 
+def _extract_error_span(context_original, context_corrected):
+    """Use Levenshtein alignment to extract the precise error span from context strings.
+    Given contexts like '...to school and study. I can play...' and '...to school and studied. I can play...',
+    returns (quote, correction) = ('study.', 'studied').
+    Falls back to the full context if alignment fails."""
+    from rapidfuzz.distance import Levenshtein
+    
+    if not context_original or not context_corrected:
+        return "", ""
+    
+    o = context_original.strip()
+    c = context_corrected.strip()
+    
+    # Use Levenshtein editops to find the changed region
+    ops = Levenshtein.editops(o, c)
+    if not ops:
+        return o, c
+    
+    # Find the span of edits in the original and corrected strings
+    o_start = min(op[1] for op in ops)
+    o_end = max(op[1] + (op[0] == 'delete' and 1 or (op[0] == 'replace' and 1 or 0)) for op in ops)
+    c_start = min(op[2] for op in ops)
+    c_end = max(op[2] + (op[0] == 'insert' and 1 or (op[0] == 'replace' and 1 or 0)) for op in ops)
+    
+    # Expand to word boundaries
+    while o_start > 0 and o[o_start - 1].isalnum():
+        o_start -= 1
+    while o_end < len(o) and o[o_end].isalnum():
+        o_end += 1
+    while c_start > 0 and c[c_start - 1].isalnum():
+        c_start -= 1
+    while c_end < len(c) and c[c_end].isalnum():
+        c_end += 1
+    
+    quote = o[o_start:o_end].strip()
+    correction = c[c_start:c_end].strip()
+    
+    # Fallback if extraction produced empty or oversized results
+    if not quote or not correction or len(quote) > 200 or len(correction) > 200:
+        return o, c
+    
+    return quote, correction
+
+
+def _get_rule_for_error_type(error_type):
+    """Generate a simple, concrete rule for an ERRANT error type."""
+    rules = {
+        "R:ORTH": "Check your capitalisation and spacing carefully.",
+        "R:SPELL": "Make sure to spell words correctly.",
+        "R:NOUN": "Use the correct form of the noun (singular/plural/possessive).",
+        "R:NOUN:NUM": "Make sure singular and plural nouns are used correctly.",
+        "R:VERB": "Use the correct verb form.",
+        "R:VERB:TENSE": "Keep your verbs in the same tense throughout.",
+        "R:VERB:SVA": "A singular subject needs a singular verb.",
+        "R:VERB:FORM": "Use the correct verb form after certain words.",
+        "R:ADJ": "Use adjectives correctly.",
+        "R:ADJ:FORM": "Use the correct form for comparing things.",
+        "R:ADV": "Use adverbs correctly to describe actions.",
+        "R:PREP": "Choose the right preposition for the context.",
+        "R:PRON": "Use the correct pronoun form.",
+        "R:DET": "Use 'a', 'an', 'the', or other determiners correctly.",
+        "R:CONJ": "Use connecting words correctly between ideas.",
+        "R:PUNCT": "Use correct punctuation to make your writing clear.",
+        "R:WO": "Put words in the correct order.",
+        "R:MORPH": "Use the correct form of the word.",
+        "M:DET": "Don't forget to include 'a', 'an', or 'the' when needed.",
+        "M:PREP": "Don't forget to include prepositions like 'to', 'for', 'with'.",
+        "M:PUNCT": "Don't forget to add punctuation at the end of sentences.",
+        "U:DET": "Remove unnecessary words like extra articles.",
+        "OTHER": "Check this part of your sentence for errors.",
+    }
+    return rules.get(error_type, f"Pay attention to {error_type.lower()} errors.")
+
+
+def _extract_topic_keywords(text, max_words=15):
+    """Extract meaningful keywords from the original text for personalised praise."""
+    import re
+    # Remove common stopwords and punctuation
+    stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+                 'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
+                 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'can',
+                 'could', 'should', 'may', 'might', 'i', 'me', 'my', 'myself', 'we',
+                 'our', 'you', 'your', 'it', 'its', 'they', 'them', 'their', 'he',
+                 'she', 'him', 'her', 'his', 'this', 'that', 'these', 'those',
+                 'what', 'when', 'where', 'why', 'how', 'all', 'each', 'every',
+                 'some', 'any', 'no', 'not', 'very', 'too', 'so', 'because', 'about',
+                 'like', 'just', 'also', 'now', 'then', 'here', 'there', 'really',
+                 'thing', 'things', 'much', 'more', 'most', 'lot', 'good', 'well',
+                 'get', 'got', 'make', 'made', 'think', 'know', 'want', 'see', 'go',
+                 'come', 'take', 'give', 'use', 'say', 'tell', 'ask', 'try', 'need',
+                 'feel', 'help', 'work', 'play', 'love', 'enjoy', 'like'}
+    
+    words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
+    content = [w for w in words if w not in stopwords and len(w) > 2]
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for w in content:
+        if w not in seen:
+            seen.add(w)
+            unique.append(w)
+    return unique[:max_words]
+
+
 def _build_deterministic_summary(output):
-    """Fully deterministic fallback — no LLM at all. Used when JSON parsing fails."""
+    """Fully deterministic fallback — no LLM at all.
+    Constructs a personalised summary using ERRANT error analysis data
+    with proper verbatim quotes and corrections extracted via Levenshtein alignment."""
     name = output.get("name", "student")
     errors = output.get("errant_analysis", {}).get("errors", [])
     top = errors[:3]
     
+    # Extract topic keywords for personalised praise
+    original_text = output.get("original_text", "")
+    keywords = _extract_topic_keywords(original_text)
+    topic_hint = ""
+    if keywords:
+        # Pick 3-5 meaningful words for the praise
+        hint_words = keywords[:5]
+        topic_hint = f" about {', '.join(hint_words[:-1])} and {hint_words[-1]}" if len(hint_words) > 1 else f" about {hint_words[0]}"
+    
     summary_data = {
-        "praise": f"Great work on your writing, {name}! Keep up the good practice.",
-        "segue": "Here are some areas to focus on to improve your writing further.",
+        "praise": f"Nice writing{topic_hint}. Keep practising and you will continue to improve!",
+        "segue": "Here are some things to work on for your next piece of writing.",
         "errors": []
     }
+    
     for e in top:
         etype = e.get("type", "OTHER")
         desc = human_error_type(etype)
-        example = e.get("example", "")
+        
+        # Extract proper quote and correction from context using Levenshtein alignment
+        ctx_orig = e.get("context_original", "")
+        ctx_corr = e.get("context_corrected", "")
+        quote, correction = _extract_error_span(ctx_orig, ctx_corr)
+        
+        # Fallback if extraction failed
+        if not quote:
+            quote = ctx_orig[:60] if ctx_orig else e.get("example", "")
+        if not correction:
+            correction = ctx_corr[:60] if ctx_corr else ""
+        
         summary_data["errors"].append({
             "name": desc,
-            "rule": f"Pay attention to {etype.lower()} errors.",
-            "quote": example if example else e.get("context_original", "")[:30],
-            "correction": "",
+            "rule": _get_rule_for_error_type(etype),
+            "quote": quote.strip(),
+            "correction": correction.strip(),
         })
     
     rendered = render_summary_to_text(summary_data, name)
+    output["summary_type"] = "local"
     return {"summary": rendered, "summary_data": summary_data}
 
 
@@ -992,7 +1136,8 @@ def _finalize_output(output, file_path):
     output["summary"] = summary_result.get("summary", "") if isinstance(summary_result, dict) else str(summary_result or "")
     output["summary_data"] = summary_result.get("summary_data") if isinstance(summary_result, dict) and summary_result.get("summary_data") else None
     preview = output["summary"][:80] if output["summary"] else "(empty)"
-    tqdm.write(f"  Summary: {preview}...")
+    stype = output.get("summary_type", "?")
+    tqdm.write(f"  Summary ({stype}): {preview}...")
     # Re-write with summary
     write_output(output, file_path)
     # Insert into Supabase
@@ -1072,7 +1217,7 @@ def main_batch(files):
 
 def main():
     if not API_KEY:
-        print("Error: no API key found. Set OPENAI_API_KEY in .env or environment.")
+        print("Error: no API key found. Set DEEPSEEK_API_KEY in .env or environment.")
         sys.exit(1)
 
     files = find_output_files()
@@ -1096,7 +1241,7 @@ def main():
 if __name__ == "__main__":
     if "--batch" in sys.argv:
         if not API_KEY:
-            print("Error: no API key found. Set OPENAI_API_KEY in .env or environment.")
+            print("Error: no API key found. Set DEEPSEEK_API_KEY in .env or environment.")
             sys.exit(1)
         files = find_output_files()
         # Optional folder filter after --batch, e.g. --batch test2
