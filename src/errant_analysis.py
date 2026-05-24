@@ -444,7 +444,7 @@ def insert_error_reports(output: dict):
             "error_percent": output["error_rate"],
             "summary": output.get("summary", ""),
             "word_count": output.get("word_count", 0),
-            "academic_year": 2007,
+            "academic_year": 2027,
         }
         for col in ERROR_CODE_COLUMNS:
             row[col] = 0
