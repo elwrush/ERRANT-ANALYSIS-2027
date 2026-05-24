@@ -65,7 +65,7 @@ Check every changed file against these rules. List all violations with file path
 - **API URL** — Both correction and summary: `https://api.deepseek.com` (direct DeepSeek API).
 - **Models** — Ingestion: `google/gemini-2.5-flash-lite-preview-09-2025`. ERRANT correction & summary: `deepseek-v4-flash`.
 - **Retry** — Exponential backoff (`2^n` + jitter, capped 60s), max retries ≥ 3.
-- **ERRANT temps** — Correction pass at 0.1, summary pass at 0.8.
+- **ERRANT temps** — Correction pass at 0.6, summary pass at 0.8.
 - **Imports** — Every non-stdlib import must be in `requirements.txt`.
 - **No dangerous patterns** — No `eval()`, `exec()`, `subprocess` with `shell=True`.
 - **Test import pattern** — Uses `sys.path.insert` relative path, not hardcoded absolute.

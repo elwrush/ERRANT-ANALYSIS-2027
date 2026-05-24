@@ -52,7 +52,7 @@ This project runs on Windows PowerShell 5.1.
 | Summary | `deepseek-v4-flash` | DeepSeek API | $0.14 | $0.28 |
 | Ingestion | `google/gemini-2.5-flash-lite-preview-09-2025` | OpenRouter | | |
 
-Correction runs at temperature 0.1 (minimal edits). Summary runs at 0.8 (non-thinking mode). Full pipeline cost: ~$0.00039 per student.
+Correction runs at temperature 0.6 (minimal edits). Summary runs at 0.8 (non-thinking mode). Full pipeline cost: ~$0.00039 per student.
 
 ## Context7 documentation lookup
 

@@ -42,6 +42,7 @@ Each output file contains:
 - `errant_analysis.errors[]` — error types with counts and context spans
 - `sentence_pairs[]` — aligned original/corrected sentence pairs
 - `summary` — personalised feedback with hallucination-verified examples
+- `summary_type` — `"llm"` or `"local"` (flagged files needing probabilistic rewrite)
 - `error_rate` — `total_edit_count / word_count × 100`
 - `name`, `class` — from the input JSON or Supabase classlist lookup
 

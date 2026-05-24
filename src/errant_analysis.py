@@ -26,10 +26,10 @@ _client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com", max_retri
 
 OUTPUTS_DIR = Path("outputs")
 LOCAL_WORKING_DIR = Path("local-working")
+TEMPERATURE = 0.6
 
-TEMPERATURE = 0.1
-MAX_RETRIES = 5
-REQUEST_TIMEOUT = 60
+MAX_RETRIES = 3
+REQUEST_TIMEOUT = 120
 MULTI_TOKEN_THRESHOLD = 3
 SUMMARY_TEMPERATURE = 0.8
 MAX_WORKERS = 5
@@ -37,19 +37,14 @@ MAX_OUTPUT_TOKENS = 4096
 MISSING_STUDENT_IDS: dict[str, list[str]] = {}
 
 # Whole-text correction prompt — minimal edits: fix errors, don't rewrite
-CORRECTION_PROMPT = """Fix ONLY grammar, spelling, and capitalization errors in the text below. Do NOT rewrite the text or change style.
+CORRECTION_PROMPT = """Fix the text below.
 
 CRITICAL RULES:
-- Do NOT delete words unless clearly duplicated or wrong (e.g. "world wide" → "worldwide")
-- Do not reorder, restructure, or rephrase
-- Do not merge or split sentences
-- Fix capitalization: sentence starts, proper nouns, pronoun "I"
-- Fix punctuation to academic English standards: no fused sentences, run-ons, comma splices, or stringy sentences. Use periods or semicolons to separate independent clauses.
-- Fix missing words: add auxiliary verbs, articles, prepositions when needed
-- Fix word forms: use correct adverb forms ("good" → "well"), verb forms ("help with putting" → "help put"), pluralization, etc.
+- the writing must not be overly embellished or changed. You are a proofreader, not an editor. The acid test is that the outputted writing is perfectly grammatical, but semantically as similar as possible.
 - Preserve original paragraph breaks
-- Convert & to "and" where it represents the word "and"
-- Only change: verb tense, subject-verb agreement, articles, prepositions, spelling, capitalization, punctuation, word forms, missing words, & → and
+- Fix punctuation to academic English standards: no fused sentences, run-ons, comma splices, or stringy sentences.
+- Fix missing words: add auxiliary verbs, articles, prepositions when needed. Take special care to ensure singular and plural nouns are used properly ("I enjoy playing drums", not "I enjoy playing drum".)
+- At the most minimal level, repair gibberish. Do not do extravagant rewriting.
 
 Original text:
 {text}
@@ -154,14 +149,14 @@ def correct_text(original_text, nlp_model):
 
 
 def call_model_custom(prompt_content, temperature=TEMPERATURE, model=None):
-    return _call_api(prompt_content, temperature, model=model, thinking=False)
+    """Call DeepSeek for correction. Thinking disabled so temperature is respected."""
+    return _call_api(prompt_content, temperature, model=model)
 
 
 @retry(max_retries=MAX_RETRIES)
-def _call_api(content, temperature, model=None, thinking=None):
-    """Call the OpenRouter API with configurable thinking mode.
-    thinking=None: use model default (correction — let the model decide)
-    thinking=False: disable thinking (summary — avoid consuming token budget on reasoning)"""
+def _call_api(content, temperature, model=None, *, disable_thinking=True):
+    """Call the DeepSeek API. By default disables thinking mode so temperature is respected.
+    Set disable_thinking=False for correction where model reasoning improves quality."""
     if not API_KEY:
         tqdm.write("  Error: no API key found (set DEEPSEEK_API_KEY in .env)")
         return None
@@ -177,9 +172,13 @@ def _call_api(content, temperature, model=None, thinking=None):
             ],
             "max_tokens": MAX_OUTPUT_TOKENS,
             "timeout": REQUEST_TIMEOUT,
+            "extra_body": {"user_id": "errant-pipeline"},
         }
-        if thinking is not None:
-            kwargs["extra_body"] = {"thinking": {"type": "enabled" if thinking else "disabled"}}
+        # Thinking mode defaults to enabled for ALL models. When enabled,
+        # temperature/top_p/presence_penalty are IGNORED with no error.
+        # We must explicitly disable thinking to use temperature for control.
+        if disable_thinking:
+            kwargs["extra_body"]["thinking"] = {"type": "disabled"}
         r = _client.chat.completions.create(**kwargs)
         result = r.choices[0].message.content
         if result:
@@ -438,7 +437,7 @@ def generate_summary(output: dict) -> dict:
         original_text=original_text,
         corrected_text=corrected_text,
     )
-    result = _call_api(prompt, SUMMARY_TEMPERATURE, model=SUMMARY_MODEL, thinking=False)
+    result = _call_api(prompt, SUMMARY_TEMPERATURE, model=SUMMARY_MODEL, disable_thinking=True)
     result = _sanitize_unicode(result or "")
     
     # Try to parse JSON from the response
@@ -723,6 +722,14 @@ def build_corrected_typst(orig_doc, edits):
     while i < len(tokens):
         if edit_idx < len(edits) and i == edits[edit_idx].o_start:
             edit = edits[edit_idx]
+            # Deduplicate: skip if this edit is identical to the previous one (same position, same text)
+            if edit_idx > 0:
+                prev = edits[edit_idx - 1]
+                if (edit.o_start == prev.o_start and edit.o_end == prev.o_end
+                        and edit.o_str == prev.o_str and edit.c_str == prev.c_str
+                        and edit.type == prev.type):
+                    edit_idx += 1
+                    continue
             if edit.o_str.rstrip() == edit.c_str.rstrip():
                 result_parts.append(tokens[i].text_with_ws if i < len(tokens) else "")
                 i += 1
