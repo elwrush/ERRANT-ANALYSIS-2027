@@ -409,6 +409,7 @@ def generate_summary(output: dict) -> str | None:
     if warnings:
         for w in warnings[:3]:
             tqdm.write(f"  Summary verification: {w}")
+        errors = output.get("errant_analysis", {}).get("errors", [])
         return _build_deterministic_summary(output, errors[:3])
 
     return result
