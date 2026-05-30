@@ -8,25 +8,21 @@ Full ERRANT analysis pipeline: ingests student handwriting images via OCR transc
 
 This project runs on Windows PowerShell 5.1.
 
-## Slash commands
+## Slash commands & skills
 
-- `/ingest-papers` — Transcribe handwritten essays from `inputs/` subfolders using `google/gemini-2.5-flash-lite-preview-09-2025`
-- `/local-errant-analysis` — Run ERRANT grammatical error analysis on transcribed essays
-- `/git-backup` — Diff, commit with a verbose message, and push to remote
-- `/rename-json-files` — Rename ERRANT output JSONs to student_id.json, validated against Supabase classlist
-- `/review` — Run lint, tests, and quality review of uncommitted changes against project conventions
-- `/local-report` — Generate Typst report booklets from ERRANT analysis with summary, charts, and PDF output
-- `/context7` — Search Context7 for up-to-date library documentation (global skill)
+| Command | Skill file | Description |
+|---------|------------|-------------|
+| `/ingest-images` | `.kilo/skills/ingest-images/SKILL.md` | Transcribe handwritten essays from images via Gemini on OpenRouter |
+| `/errant-analysis` | `.kilo/skills/errant-analysis/SKILL.md` | Grammatical error correction and analysis with DeepSeek + ERRANT |
+| `/git-backup` | `.kilo/skills/git-backup/SKILL.md` | Diff, commit with verbose message, and push to remote |
+| `/rename-json-files` | `.kilo/skills/rename-json-files/SKILL.md` | Rename ERRANT outputs to `student_id.json`, validated against Supabase classlist |
+| `/review` | — (self-contained) | Run lint, tests, and quality review of uncommitted changes |
+| `/local-report` | `.kilo/skills/local-report/SKILL.md` | Generate Typst report booklets from ERRANT analysis with PDF output |
+| `/context7` | `.kilo/skills/context7-docs/SKILL.md` | Search library documentation via Context7 API (global skill) |
 
-## Skills
+### Global skills (no dedicated command)
 
-- `.kilo/skills/ingest-images/SKILL.md` — Full workflow for handwriting image ingestion and transcription
-- `.kilo/skills/errant-analysis/SKILL.md` — Full workflow for grammatical error analysis with ERRANT
-- `.kilo/skills/git-backup/SKILL.md` — Full workflow for diff, commit, and push
-- `.kilo/skills/rename-json-files/SKILL.md` — Full workflow for renaming ERRANT output files with classlist validation
-- `.kilo/skills/local-report/SKILL.md` — Full workflow for generating Typst report booklets with summary, charts, and PDF compilation
-- `.kilo/skills/tavily-websearch/SKILL.md` — Global skill: Web search via Tavily AI Search API (5 pre-written Python models). Use for research, fact-checking, or content gathering. Copy the script verbatim from the skill, change only the query/URL/parameters.
-- `.kilo/skills/context7-docs/SKILL.md` — Global skill: Query library documentation via Context7 REST API (3 pre-written Python models). Use for checking if documentation exists for a library, then fetching version-specific code examples and API references. Falls back to Tavily when a library is not indexed.
+- `tavily-websearch` (`.kilo/skills/tavily-websearch/SKILL.md`) — Web search via Tavily AI Search API for research, fact-checking, or content gathering.
 
 ## Reference docs
 
@@ -43,6 +39,8 @@ This project runs on Windows PowerShell 5.1.
 | `TAVILY_API_KEY` | Tavily web search | ✅ |
 | `SUPABASE_URL` | Supabase project URL | as needed |
 | `SUPABASE_ESL_KEY` | Supabase service role key | as needed |
+| `SUPABASE_ACCESS_TOKEN` | Personal Access Token for Management API (DDL / migrations) | Generate at supabase.com/dashboard/account/tokens |
+| `SUPABASE_DB_URL` | (DEPRECATED) Direct Postgres connection string — use Management API instead | - |
 
 ## Models (current)
 
@@ -80,7 +78,7 @@ Context7 has Typst indexed (ID: `/typst/typst`). Use Context7 as the first choic
 
 | Item | Path |
 |------|------|
-| Main script | `src/ingest.py`, `src/errant_analysis.py`, `src/rename_json_files.py`, `src/add_word_count.py`, `src/generate_report.py`, `src/interpret_results.py`, `src/desk_statistics.py` |
+| Main script | `src/ingest.py`, `src/errant_analysis.py`, `src/rename_json_files.py`, `src/add_word_count.py`, `src/generate_report.py`, `src/interpret_results.py`, `src/desk_statistics.py`, `src/preflight_check.py` |
 | Tests | `tests/test_ingest.py`, `tests/test_errant.py`, `tests/test_rename_json_files.py`, `tests/test_report.py` |
 | Dependencies | `requirements.txt` |
 | Linter | `ruff` (config: `.ruff.toml`) |
@@ -102,14 +100,25 @@ ruff check src/ tests/
 pytest tests/ -v
 ```
 
-## Data lineage and class-label convention
+## Pipeline
 
-- Source table: `student_submissions` in Supabase (filter: skill='Writing') (each row = one essay submission)
-- Sampling plan: `sampling_strategy.py` → `local-working/sampling_plan.json`
-- Research prep: `research_prep.py` → `outputs/research/{record_id}.json`
-- Ingestion: `ingest.py` → `outputs/{folder}/{student_id}.json`
-- **ID verification (MANDATORY sign-off):** After ingestion, the agent must present the image→ID mapping to the human for confirmation. Only after sign-off does the pipeline proceed.
-- ERRANT analysis: `errant_analysis.py` → `local-working/{folder}-{record_id}.json`
+The full ERRANT analysis pipeline consists of these ordered stages. Each stage must complete before the next begins.
+
+| # | Stage | Command | Script | Entry gate | Output | Exit gate |
+|---|-------|---------|--------|------------|--------|-----------|
+| 0 | Sampling plan | *(manual)* | `sampling_strategy.py` | — | `local-working/sampling_plan.json` | Plan approved |
+| 1 | Ingestion | `/ingest-images` | `src/ingest.py` | Images in `inputs/{folder}/` | `outputs/{folder}/{student_id}.json` | Preflight check pass + human sign-off on image→ID mapping |
+| 2 | ERRANT analysis | `/errant-analysis` | `src/errant_analysis.py` | Ingestion outputs exist + sign-off confirmed | `local-working/{folder}-{record_id}.json` | All files processed |
+| 3 | Rename JSONs | `/rename-json-files` | `src/rename_json_files.py` | ERRANT outputs exist | `local-working/{student_id}.json` | All names validated against Supabase classlist |
+| 4 | Report generation | `/local-report` | `src/generate_report.py` | Renamed JSONs exist | PDF booklet(s) | Typst compiles without convergence warnings |
+| 5 | Backup (optional) | `/git-backup` | *(git workflow)* | Changes to commit | Pushed to remote | — |
+
+**Stage gates (blocking conditions):**
+- **Preflight check:** After ingestion, run `src/preflight_check.py "FOLDER_NAME"` to detect artificial line breaks. If warnings appear, fix before proceeding.
+- **ID sign-off (MANDATORY):** Present the image→ID mapping to the human. Do NOT proceed to ERRANT analysis without explicit confirmation.
+- **Typst verification:** After report generation, verify the PDF compiles without "layout did not converge" warnings.
+
+## Data lineage and class-label convention
 
 **Class-label convention (critical — DO NOT misinterpret):**
 The `class` field in ERRANT output JSONs uses M2/M3 as **enrollment status, not academic level:**
@@ -117,6 +126,8 @@ The `class` field in ERRANT output JSONs uses M2/M3 as **enrollment status, not 
 - **M3** = student_id is NOT in `classlists` (left the program)
 
 All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the Supabase classlist. The label reflects enrollment, not which year they're in. This is consistent across all 689 files (zero anomalies).
+
+**CEFR level mapping for chart target lines:** All M3-M6 classes are B2 (target 7% error rate). Lower classes fall to B1 (target 12%).
 
 ## Input/output conventions
 
@@ -131,5 +142,6 @@ All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the Su
 
 - Verbatim — retain ALL errors (grammar, spelling, vocabulary)
 - Student ID extracted from ID field on the page (not filename)
+- Transcribe ONLY handwriting on ruled lines — skip the demographic header block (ID, class, name fields)
 - `\n` ONLY at paragraph boundaries; never at fixed character widths
 - Crossed-out text skipped; carat/insertion symbols resolved to natural flow

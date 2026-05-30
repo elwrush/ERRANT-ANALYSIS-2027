@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import json
+from datetime import date
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -329,26 +330,36 @@ def _sanitize_unicode(text):
 
 
 
-SUMMARY_PROMPT_FMT = """Analyze the writing of {name}, a Thai middle-school ESL student (error rate: {error_rate}%).
+SUMMARY_PROMPT_FMT = """You are an experienced ESL writing teacher. A student ({name}, CEFR B1 level, error rate: {error_rate}%) wrote the original text below. A corrected version is also provided.
 
-Return ONLY a JSON object with these exact keys (no markdown, no code fences, no extra text):
+Identify the 3 most important errors. For each, write a short, encouraging explanation at CEFR B1 level — simple, direct language.
 
-1. "praise": 2-3 sentences of warm, specific praise about their writing - mention something concrete they wrote about. Keep it personal and genuine. Make them feel encouraged and motivated. Use simple, direct language. Do NOT use flowery or gushing language — banned words include: shine, shines, sparkle, glow, radiate, gleam, brilliant, wonderful (except as simple "It's wonderful that you..."), amazing, incredible.
+Use this exact JSON format. The example errors are for illustration — replace with the student's actual errors:
 
-2. "segue": One transition phrase that flows directly from the praise into the corrections. Use straightforward, direct language. For example: "To improve even further, try to be aware of the following errors which I noticed in your work." Do NOT use flowery language like "shine", "sparkle", "glow", "shines through", or similar.
+{{
+  "praise": "2-3 warm sentences about something specific they wrote. Keep it genuine. Do NOT use: shine, sparkle, glow, brilliant, amazing, incredible.",
+  "segue": "One natural transition into the corrections, e.g. 'To improve even further, try to be aware of the following errors.'",
+  "errors": [
+    {{
+      "name": "Spelling",
+      "explanation": "You wrote \\"possesion\\" but the correct spelling is \\"possession.\\" Remember to double the 's' in the middle: poss-ess-ion."
+    }},
+    {{
+      "name": "Sentence fragment",
+      "explanation": "You wrote \\"In my free time.\\" with a full stop, but this group of words is not a complete sentence because it has no main verb. You cannot put a full stop here. Instead, connect it to your next sentence. For example: \\"In my free time, I love to play computer games with my friend.\\""
+    }},
+    {{
+      "name": "Comma splice",
+      "explanation": "You wrote \\"I love to play computer games with my friend, I am always learning\\" which is two complete thoughts joined by only a comma. Add a connecting word like 'and' after the comma: \\"I love to play computer games with my friend, and I am always learning.\\""
+    }}
+  ]
+}}
 
-3. "errors": An array of exactly 3 objects, one for each of the most important error patterns found. Each object has:
-   - "name": Short, clear category name (e.g. "Verb tense consistency", "Article usage", "Subject-verb agreement")
-   - "rule": A simple rule the student can remember, written as a complete sentence
-   - "quote": An EXACT verbatim quote from the ORIGINAL TEXT showing the mistake. Must be copied character-for-character from the original text below.
-   - "correction": The corrected version of the quoted text (fix grammar/spelling only). Must match the ACTUAL correction in the CORRECTED TEXT below — do not paraphrase or rephrase. The corrected version must appear character-for-character in the CORRECTED TEXT.
-
-Example of the errors array format:
-[
-  {{"name": "Verb tense consistency", "rule": "Keep your verbs in the same tense throughout.", "quote": "I felt sad", "correction": "I feel sad"}},
-  {{"name": "Article usage", "rule": "Use 'a' or 'the' before nouns.", "quote": "to be leader", "correction": "to be a leader"}},
-  {{"name": "Subject-verb agreement", "rule": "A singular subject needs a singular verb.", "quote": "my friend make me sure", "correction": "my friend makes me sure"}}
-]
+CRITICAL RULES:
+- Every phrase in double quotes within the explanation must appear verbatim in the original text below.
+- Do NOT change, rephrase, or invent the student's words.
+- Keep language simple and direct — explain like a teacher talking to a B1 learner.
+- Explain why it is wrong and how to fix it, with a natural example.
 
 ORIGINAL TEXT:
 {original_text}
@@ -356,42 +367,30 @@ ORIGINAL TEXT:
 CORRECTED TEXT:
 {corrected_text}
 
-Return ONLY the JSON object."""
+Return ONLY the JSON object — no markdown, no code fences, no extra text."""
 
 
 def _verify_structured_summary(summary_data, original_text, corrected_text):
-    """Verify that every quote in the structured summary exists in the original text,
-    and that every proposed correction exists in the corrected text.
-    Returns list of warnings (empty = all clean)."""
+    """Verify that every double-quoted phrase in each error's explanation
+    appears verbatim in either the original or corrected text.
+    Explanations naturally quote the student's error (from original) and
+    show example fixes (from corrected). Both are legitimate.
+    Returns list of warnings (empty = clean). Warnings do NOT trigger the
+    fallback — only empty/unparseable summary_data does."""
     warnings = []
-    
-    def normalize(t):
-        s = t.lower().strip()
-        s = re.sub(r'[.,;:!?\'\"\u2018\u2019\u201c\u201d]+', '', s)
-        s = re.sub(r'\s+', ' ', s).strip()
-        return s
     
     if not isinstance(summary_data, dict):
         return ["summary_data is not a dict"]
     
     errors = summary_data.get("errors", [])
     for i, err in enumerate(errors):
-        quote = err.get("quote", "")
-        correction = err.get("correction", "")
-        
-        if not quote:
-            warnings.append(f"Error {i}: empty quote")
-        else:
-            nq = normalize(quote)
-            no = normalize(original_text)
-            if nq not in no and quote.lower() not in original_text.lower():
-                warnings.append(f"E{i}: quote '{quote[:60]}' not found in original")
-        
-        if correction:
-            nc = normalize(correction)
-            ncorr = normalize(corrected_text)
-            if nc not in ncorr and correction.lower() not in corrected_text.lower():
-                warnings.append(f"E{i}: correction '{correction[:60]}' not found in corrected text")
+        explanation = err.get("explanation", "")
+        # Extract all double-quoted phrases from the explanation
+        quoted_phrases = re.findall(r'"([^"]*)"', explanation)
+        for j, phrase in enumerate(quoted_phrases):
+            # Accept if in EITHER original or corrected
+            if phrase not in original_text and phrase not in corrected_text:
+                warnings.append(f"E{i}: phrase '{phrase[:80]}' not found verbatim in original or corrected")
     
     return warnings
 
@@ -414,11 +413,8 @@ def render_summary_to_text(summary_data, name):
         parts.append("")
         for err in errors:
             name_cat = err.get("name", "")
-            rule = err.get("rule", "")
-            quote = err.get("quote", "")
-            correction = err.get("correction", "")
-            parts.append(f"*{name_cat}:* {rule}")
-            parts.append(f"You wrote \"{quote},\" but it should be \"#underline[{correction}].\"")
+            explanation = err.get("explanation", "") or err.get("rule", "")
+            parts.append(f"*{name_cat}:* {explanation}")
             parts.append("")
     
     return "\n".join(parts).strip()
@@ -431,9 +427,10 @@ def generate_summary(output: dict) -> dict:
     original_text = output.get("original_text", "")
     corrected_text = output.get("corrected_text", "")
 
+    er_display = output["error_rate"] if output["error_rate"] is not None else "N/A"
     prompt = SUMMARY_PROMPT_FMT.format(
         name=name,
-        error_rate=output["error_rate"],
+        error_rate=er_display,
         original_text=original_text,
         corrected_text=corrected_text,
     )
@@ -461,177 +458,24 @@ def generate_summary(output: dict) -> dict:
     
     if isinstance(parsed, dict) and "praise" in parsed and "errors" in parsed:
         summary_data = parsed
-        # Verify quotes and corrections
+        # Verify quotes — warn only, never reject. Pedagogical examples
+        # may differ slightly from the corrected text (different punctuation,
+        # truncated sentences for clarity). The model knows best how to explain.
         corrected_plain = output.get("corrected_text", "")
         warnings = _verify_structured_summary(summary_data, original_text, corrected_plain)
-        if warnings:
-            for w in warnings[:3]:
-                tqdm.write(f"  Summary verification: {w}")
-            tqdm.write("  Falling back to local probabilistic rewrite (LLM output failed verification)")
-            return _build_deterministic_summary(output)
+        for w in warnings[:3]:
+            tqdm.write(f"  Summary verification (info only): {w}")
         
         rendered = render_summary_to_text(summary_data, name)
         tqdm.write(f"  Summary generated ({len(summary_data.get('errors', []))} errors)")
         output["summary_type"] = "llm"
         return {"summary": rendered, "summary_data": summary_data}
     
-    # LLM didn't return valid JSON — fallback
-    tqdm.write("  Could not parse structured summary, using local probabilistic rewrite")
-    return _build_deterministic_summary(output)
-
-
-def _extract_error_span(context_original, context_corrected):
-    """Use Levenshtein alignment to extract the precise error span from context strings.
-    Given contexts like '...to school and study. I can play...' and '...to school and studied. I can play...',
-    returns (quote, correction) = ('study.', 'studied').
-    Falls back to the full context if alignment fails."""
-    from rapidfuzz.distance import Levenshtein
-    
-    if not context_original or not context_corrected:
-        return "", ""
-    
-    o = context_original.strip()
-    c = context_corrected.strip()
-    
-    # Use Levenshtein editops to find the changed region
-    ops = Levenshtein.editops(o, c)
-    if not ops:
-        return o, c
-    
-    # Find the span of edits in the original and corrected strings
-    o_start = min(op[1] for op in ops)
-    o_end = max(op[1] + (op[0] == 'delete' and 1 or (op[0] == 'replace' and 1 or 0)) for op in ops)
-    c_start = min(op[2] for op in ops)
-    c_end = max(op[2] + (op[0] == 'insert' and 1 or (op[0] == 'replace' and 1 or 0)) for op in ops)
-    
-    # Expand to word boundaries
-    while o_start > 0 and o[o_start - 1].isalnum():
-        o_start -= 1
-    while o_end < len(o) and o[o_end].isalnum():
-        o_end += 1
-    while c_start > 0 and c[c_start - 1].isalnum():
-        c_start -= 1
-    while c_end < len(c) and c[c_end].isalnum():
-        c_end += 1
-    
-    quote = o[o_start:o_end].strip()
-    correction = c[c_start:c_end].strip()
-    
-    # Fallback if extraction produced empty or oversized results
-    if not quote or not correction or len(quote) > 200 or len(correction) > 200:
-        return o, c
-    
-    return quote, correction
-
-
-def _get_rule_for_error_type(error_type):
-    """Generate a simple, concrete rule for an ERRANT error type."""
-    rules = {
-        "R:ORTH": "Check your capitalisation and spacing carefully.",
-        "R:SPELL": "Make sure to spell words correctly.",
-        "R:NOUN": "Use the correct form of the noun (singular/plural/possessive).",
-        "R:NOUN:NUM": "Make sure singular and plural nouns are used correctly.",
-        "R:VERB": "Use the correct verb form.",
-        "R:VERB:TENSE": "Keep your verbs in the same tense throughout.",
-        "R:VERB:SVA": "A singular subject needs a singular verb.",
-        "R:VERB:FORM": "Use the correct verb form after certain words.",
-        "R:ADJ": "Use adjectives correctly.",
-        "R:ADJ:FORM": "Use the correct form for comparing things.",
-        "R:ADV": "Use adverbs correctly to describe actions.",
-        "R:PREP": "Choose the right preposition for the context.",
-        "R:PRON": "Use the correct pronoun form.",
-        "R:DET": "Use 'a', 'an', 'the', or other determiners correctly.",
-        "R:CONJ": "Use connecting words correctly between ideas.",
-        "R:PUNCT": "Use correct punctuation to make your writing clear.",
-        "R:WO": "Put words in the correct order.",
-        "R:MORPH": "Use the correct form of the word.",
-        "M:DET": "Don't forget to include 'a', 'an', or 'the' when needed.",
-        "M:PREP": "Don't forget to include prepositions like 'to', 'for', 'with'.",
-        "M:PUNCT": "Don't forget to add punctuation at the end of sentences.",
-        "U:DET": "Remove unnecessary words like extra articles.",
-        "OTHER": "Check this part of your sentence for errors.",
-    }
-    return rules.get(error_type, f"Pay attention to {error_type.lower()} errors.")
-
-
-def _extract_topic_keywords(text, max_words=15):
-    """Extract meaningful keywords from the original text for personalised praise."""
-    import re
-    # Remove common stopwords and punctuation
-    stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-                 'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-                 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'can',
-                 'could', 'should', 'may', 'might', 'i', 'me', 'my', 'myself', 'we',
-                 'our', 'you', 'your', 'it', 'its', 'they', 'them', 'their', 'he',
-                 'she', 'him', 'her', 'his', 'this', 'that', 'these', 'those',
-                 'what', 'when', 'where', 'why', 'how', 'all', 'each', 'every',
-                 'some', 'any', 'no', 'not', 'very', 'too', 'so', 'because', 'about',
-                 'like', 'just', 'also', 'now', 'then', 'here', 'there', 'really',
-                 'thing', 'things', 'much', 'more', 'most', 'lot', 'good', 'well',
-                 'get', 'got', 'make', 'made', 'think', 'know', 'want', 'see', 'go',
-                 'come', 'take', 'give', 'use', 'say', 'tell', 'ask', 'try', 'need',
-                 'feel', 'help', 'work', 'play', 'love', 'enjoy', 'like'}
-    
-    words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
-    content = [w for w in words if w not in stopwords and len(w) > 2]
-    # Deduplicate while preserving order
-    seen = set()
-    unique = []
-    for w in content:
-        if w not in seen:
-            seen.add(w)
-            unique.append(w)
-    return unique[:max_words]
-
-
-def _build_deterministic_summary(output):
-    """Fully deterministic fallback — no LLM at all.
-    Constructs a personalised summary using ERRANT error analysis data
-    with proper verbatim quotes and corrections extracted via Levenshtein alignment."""
-    name = output.get("name", "student")
-    errors = output.get("errant_analysis", {}).get("errors", [])
-    top = errors[:3]
-    
-    # Extract topic keywords for personalised praise
-    original_text = output.get("original_text", "")
-    keywords = _extract_topic_keywords(original_text)
-    topic_hint = ""
-    if keywords:
-        # Pick 3-5 meaningful words for the praise
-        hint_words = keywords[:5]
-        topic_hint = f" about {', '.join(hint_words[:-1])} and {hint_words[-1]}" if len(hint_words) > 1 else f" about {hint_words[0]}"
-    
-    summary_data = {
-        "praise": f"Nice writing{topic_hint}. Keep practising and you will continue to improve!",
-        "segue": "Here are some things to work on for your next piece of writing.",
-        "errors": []
-    }
-    
-    for e in top:
-        etype = e.get("type", "OTHER")
-        desc = human_error_type(etype)
-        
-        # Extract proper quote and correction from context using Levenshtein alignment
-        ctx_orig = e.get("context_original", "")
-        ctx_corr = e.get("context_corrected", "")
-        quote, correction = _extract_error_span(ctx_orig, ctx_corr)
-        
-        # Fallback if extraction failed
-        if not quote:
-            quote = ctx_orig[:60] if ctx_orig else e.get("example", "")
-        if not correction:
-            correction = ctx_corr[:60] if ctx_corr else ""
-        
-        summary_data["errors"].append({
-            "name": desc,
-            "rule": _get_rule_for_error_type(etype),
-            "quote": quote.strip(),
-            "correction": correction.strip(),
-        })
-    
-    rendered = render_summary_to_text(summary_data, name)
-    output["summary_type"] = "local"
-    return {"summary": rendered, "summary_data": summary_data}
+    # LLM didn't return valid JSON — return empty summary
+    tqdm.write("  Could not parse structured summary — returning empty")
+    output["summary_type"] = "empty"
+    empty = {"summary": "", "summary_data": None}
+    return empty
 
 
 def insert_error_reports(output: dict):
@@ -647,10 +491,11 @@ def insert_error_reports(output: dict):
             "student_id": output["student_id"],
             "class": output.get("class", ""),
             "name": output.get("name", ""),
-            "error_percent": output["error_rate"],
+            "error_percent": output["error_rate"] if output["error_rate"] is not None else None,
             "summary": output.get("summary", ""),
             "word_count": output.get("word_count", 0),
             "academic_year": 2027,
+            "date": output.get("date_created", ""),
         }
         for col in ERROR_CODE_COLUMNS:
             row[col] = 0
@@ -712,7 +557,10 @@ def post_classify_other(o_str, c_str):
     return "OTHER"
 
 
-def build_corrected_typst(orig_doc, edits):
+def build_corrected_typst(orig_doc, edits, original_text=""):
+    """Build Typst markup from ERRANT edits. Paragraph breaks (\\n\\n)
+    are preserved automatically via spaCy token whitespace (text_with_ws).
+    No additional paragraph break insertion is needed."""
     edits = sorted(edits, key=lambda e: e.o_start)
     tokens = list(orig_doc)
     result_parts = []
@@ -864,12 +712,21 @@ def align_sentences(orig_sentences, cor_sentences):
     if len(orig_sentences) == 1 and len(cor_sentences) == 1:
         return [{"original": orig_sentences[0], "corrected": cor_sentences[0]}]
 
-    # Equal count  -  pair directly without fuzzy matching
+    # Equal count — use fuzzy matching to find best alignment
+    # (direct 1:1 can be wrong when correction reorders sentence boundaries)
     if len(orig_sentences) == len(cor_sentences):
-        return [
-            {"original": o, "corrected": c}
-            for o, c in zip(orig_sentences, cor_sentences)
-        ]
+        # Try direct pairing first, check if all pairs have reasonable similarity
+        direct_ok = True
+        for o, c in zip(orig_sentences, cor_sentences):
+            if fuzz.token_set_ratio(o, c) < 50:
+                direct_ok = False
+                break
+        if direct_ok:
+            return [
+                {"original": o, "corrected": c}
+                for o, c in zip(orig_sentences, cor_sentences)
+            ]
+        # Fall through to similarity-based matching below
 
     # Build similarity matrix
     n_orig = len(orig_sentences)
@@ -1020,6 +877,51 @@ def classify_edits(edits, orig_tokens=None, cor_tokens=None):
     return errors_list, uncategorised, dropped_edits
 
 
+def _reinsert_paragraph_breaks_llm(original_text, corrected_typst):
+    """Re-insert paragraph breaks (\\n\\n) using a lightweight DeepSeek call.
+    
+    The correction model strips paragraph breaks. Rather than fragile deterministic
+    text-matching, this asks the LLM to read both texts and fix the paragraphs
+    like a human would — add breaks where they're missing, remove any stray ones
+    that got misplaced."""
+    if "\n\n" not in original_text:
+        return corrected_typst
+
+    prompt = (
+        "I have two versions of a student's writing: the original (with correct "
+        "paragraph breaks) and a corrected version (grammar fixed, but the paragraph "
+        "breaks got jumbled up).\n\n"
+        "Fix the corrected version so its paragraph breaks match the original. "
+        "Add any missing breaks, remove any stray ones that landed in the wrong "
+        "place, and leave everything else untouched.\n\n"
+        "Original:\n"
+        "---\n"
+        f"{original_text}\n"
+        "---\n\n"
+        "Corrected (fix the paragraphs):\n"
+        "---\n"
+        f"{corrected_typst}\n"
+        "---\n\n"
+        "Return only the corrected text with proper paragraph breaks."
+    )
+
+    try:
+        response = _client.chat.completions.create(
+            model=SUMMARY_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=4096,
+            timeout=30,
+        )
+        result = response.choices[0].message.content.strip()
+        if result:
+            return result
+    except Exception as e:
+        tqdm.write(f"  LLM paragraph break insertion failed: {e}")
+
+    return corrected_typst
+
+
 def process_file(file_path, nlp=None, annotator=None):
     tqdm.write(f"\n=== Processing: {file_path.relative_to(OUTPUTS_DIR)} ===")
     with open(file_path, encoding="utf-8") as f:
@@ -1099,12 +1001,19 @@ def process_file(file_path, nlp=None, annotator=None):
     # ---- Step 4: Build Typst markup and sentence pairs ----
     corrected_typst = build_corrected_typst(orig_parse, edits)
 
+    # Re-insert paragraph breaks into corrected_typst (model strips them)
+    if "\n\n" in original_text:
+        corrected_typst = _reinsert_paragraph_breaks_llm(original_text, corrected_typst)
+
     # Split both texts into sentences for alignment
     cor_sentences = [sent.text.strip() for sent in nlp(corrected_text).sents]
     sentence_pairs = align_sentences(orig_sentences, cor_sentences)
 
     correction_count = sum(eg["count"] for eg in errors_list)
-    error_rate = round(correction_count / word_count * 100) if word_count > 0 else 0
+    if word_count > 0 and word_count < 40:
+        error_rate = None
+    else:
+        error_rate = round(correction_count / word_count * 100) if word_count > 0 else 0
 
     output = _build_output(student_id, original_text, corrected_text, word_count, student_info,
                            sentence_pairs, {"errors": errors_list, "uncategorised": uncategorised, "dropped_edits": dropped_edits},
@@ -1135,6 +1044,8 @@ def _build_output(student_id, original_text, corrected_text, word_count, student
 
 
 def _finalize_output(output, file_path):
+    # Set date_created to today's date (YYYY-MM-DD)
+    output["date_created"] = date.today().isoformat()
     # Save without summary first
     write_output(output, file_path)
     # Generate summary
@@ -1164,7 +1075,8 @@ def write_output(output, file_path):
 
     tqdm.write(f"  Saved to: {output_path}")
     tc = sum(e["count"] for e in output["errant_analysis"]["errors"])
-    tqdm.write(f"  Total corrections: {tc}, rate: {output['error_rate']}%")
+    er_display = f"{output['error_rate']}%" if output['error_rate'] is not None else "N/A"
+    tqdm.write(f"  Total corrections: {tc}, rate: {er_display}")
     tqdm.write(f"  Uncat: {len(output['errant_analysis']['uncategorised'])}")
     if output["metadata"]["identity_check"]:
         tqdm.write("  Note: text required no corrections")
@@ -1241,7 +1153,8 @@ def main():
         print(f"Complete. Output in {LOCAL_WORKING_DIR}/")
         tc = sum(e["count"] for e in result["errant_analysis"]["errors"])
         print(f"Errors detected: {tc}")
-        print(f"Error rate: {result['error_rate']}%")
+        er_display = f"{result['error_rate']}%" if result['error_rate'] is not None else "N/A"
+        print(f"Error rate: {er_display}")
         print(f"{'='*50}")
 
 

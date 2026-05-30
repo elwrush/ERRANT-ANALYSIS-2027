@@ -14,6 +14,7 @@ class TestTypContent:
             "name": "Test",
             "class": "M3-1A",
             "error_rate": 15,
+            "word_count": 100,
             "summary": "Dear Test, good writing!",
             "original_text": "Hello world.",
             "corrected_text": "Hello world.",
@@ -41,6 +42,33 @@ class TestTypContent:
         assert 'cambridge.png' in result
         assert '#grid(' in result
         assert '#line(' in result
+
+
+class TestShortText:
+    def test_build_student_block_short_text(self):
+        from generate_report import build_student_block, SHORT_TEXT_MSG
+        sample = {
+            "student_id": "99999",
+            "name": "Test",
+            "class": "M3-1A",
+            "error_rate": None,
+            "word_count": 25,
+            "summary": "Dear Test, good writing!",
+            "original_text": "Hello world.",
+            "corrected_text": "Hello world.",
+            "corrected_typst": "Hello world.",
+            "errant_analysis": {"errors": [
+                {"type": "R:SPELL", "count": 2, "example": "hello -> hello"},
+            ]},
+        }
+        result = build_student_block(sample, 0)
+        assert isinstance(result, str)
+        assert SHORT_TEXT_MSG in result
+        assert "Writing Accuracy Feedback Report" in result
+        assert "Word count: 25" in result
+        assert "Hello world" not in result
+        assert "Your Writing with Corrections" not in result
+
 
     def test_header_is_valid(self):
         from generate_report import build_typ_header

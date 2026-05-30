@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Create the error_analysis table and add error code columns to error_reports."""
+"""Add error code columns and date column to error_reports table.
+
+Uses the supabase_sql utility (Management API or supabase CLI) — no psycopg2 needed.
+Requires SUPABASE_ACCESS_TOKEN in environment or a linked project + supabase CLI.
+"""
 import os
 import sys
 from dotenv import load_dotenv
+from supabase_sql import execute_via_api, execute_via_cli
 
 load_dotenv()
 
-SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL")
-
 NEW_COLUMNS = [
     "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS academic_year INTEGER DEFAULT 2007",
+    "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS date DATE",
 ]
 
 COLUMNS_SQL = [
@@ -59,39 +63,55 @@ COLUMNS_SQL = [
     "ALTER TABLE public.error_reports ADD COLUMN IF NOT EXISTS unk INTEGER DEFAULT 0",
 ]
 
+BACKFILL_SQL = [
+    "UPDATE public.error_reports SET date = created_at::date WHERE date IS NULL",
+]
 
-def execute_via_psycopg2():
-    import psycopg2
-    conn = psycopg2.connect(SUPABASE_DB_URL, sslmode="require")
-    conn.autocommit = True
-    cur = conn.cursor()
-    for stmt in NEW_COLUMNS + COLUMNS_SQL:
-        cur.execute(stmt)
-    cur.close()
-    conn.close()
-    print(f"Added {len(NEW_COLUMNS) + len(COLUMNS_SQL)} columns to error_reports")
+
+def execute_sql_via_utility(statements: list[str]):
+    """Execute SQL statements using supabase CLI (preferred) or Management API (fallback)."""
+    for stmt in statements:
+        result = execute_via_cli(stmt)
+        if result:
+            # CLI succeeded; stmt was already executed
+            if "UPDATE" in stmt.upper():
+                print(f"  Executed: {stmt[:60]}...")
+        else:
+            # CLI not available — fall back to Management API
+            execute_via_api(stmt)
+            print(f"  Executed via API: {stmt[:60]}...")
 
 
 def print_sql():
+    """Print raw SQL statements for manual execution in Supabase dashboard."""
+    print("-- Add new columns:")
     for stmt in NEW_COLUMNS + COLUMNS_SQL:
+        print(stmt + ";")
+    print("\n-- Backfill existing rows (run after column addition):")
+    for stmt in BACKFILL_SQL:
         print(stmt + ";")
 
 
 def main():
-    if not SUPABASE_DB_URL:
-        print("Set SUPABASE_DB_URL in .env (get it from Supabase Dashboard → Project Settings → Database → Connection string, with password)")
-        print("\nAlternatively, copy & paste the SQL below into the Supabase SQL editor:\n")
-        print_sql()
-        sys.exit(1)
+    if not os.environ.get("SUPABASE_ACCESS_TOKEN"):
+        print("NOTE: SUPABASE_ACCESS_TOKEN not set.")
+        print("  Generate one at: https://supabase.com/dashboard/account/tokens")
+        print("  Then set:  $env:SUPABASE_ACCESS_TOKEN = 'sbp_...'")
+        print()
 
-    try:
-        execute_via_psycopg2()
-    except Exception as e:
-        print(f"Database connection failed: {e}")
-        print("\nMake sure SUPABASE_DB_URL is correct. Copy the connection string from:")
-        print("  Supabase Dashboard → Project Settings → Database → Connection string (URI)")
-        print("Then add it to .env as:")
-        print('  SUPABASE_DB_URL="postgresql://postgres:YOUR_PASSWORD@db.xxxxx.supabase.co:5432/postgres"')
+    # Try CLI first, then API, then print SQL as last resort
+    all_statements = NEW_COLUMNS + COLUMNS_SQL + BACKFILL_SQL
+
+    has_cli = execute_via_cli("SELECT 1;")
+    has_api = bool(os.environ.get("SUPABASE_ACCESS_TOKEN"))
+
+    if has_cli or has_api:
+        print("Running migration...")
+        execute_sql_via_utility(all_statements)
+        print(f"\nDone. Processed {len(all_statements)} SQL statement(s).")
+    else:
+        print("No supabase CLI available and SUPABASE_ACCESS_TOKEN not set.\n")
+        print_sql()
         sys.exit(1)
 
 

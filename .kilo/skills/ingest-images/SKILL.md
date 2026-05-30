@@ -107,6 +107,22 @@ After ingestion completes, you **must** verify all extracted student IDs with th
 
 5. **Proceed only after sign-off** — Do not run ERRANT analysis, Supabase uploads, or report generation until the user has confirmed the IDs are correct.
 
+### Preflight line-break check
+
+After ingestion and ID sign-off, run the preflight check to catch artificial line breaks:
+```bash
+python src/preflight_check.py "FOLDER_NAME"
+```
+If any warnings appear (line break followed by lowercase = handwritten line wrap), fix the affected files before ERRANT analysis.
+
+### Transcription rules (enforced by prompt)
+
+- Verbatim — retain ALL errors (grammar, spelling, vocabulary)
+- Student ID extracted from ID field on the page (not filename)
+- Transcribe ONLY handwriting on ruled lines — skip the demographic header block (ID, class, name fields)
+- `\n` ONLY at paragraph boundaries; never at fixed character widths
+- Crossed-out text skipped; carat/insertion symbols resolved to natural flow
+
 ## Output Format
 
 One JSON file per student. Multi-page essays have their pages joined with a single space.

@@ -30,7 +30,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_ESL_KEY")
 _supabase_client = None
 
-MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
+MODEL = "google/gemini-2.5-flash"
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 INPUTS_DIR = Path("inputs")
@@ -70,11 +70,94 @@ def lookup_student_info(student_id: str) -> dict:
     return {"name": "", "class": ""}
 
 
-SYSTEM_PROMPT = """You are a handwriting transcription tool. Your task is to transcribe handwritten English essays EXACTLY as written — preserve ALL spelling, grammar, and vocabulary errors. You are a transcriber, NOT a proofreader. Do not correct anything.
+_classlist_cache = None
+
+
+def load_classlist_cache():
+    """Fetch all student IDs and names from classlists into a module-level cache.
+    Returns dict mapping student_id -> {name, class}."""
+    global _classlist_cache
+    if _classlist_cache is not None:
+        return _classlist_cache
+    _classlist_cache = {}
+    client = get_supabase_client()
+    if not client:
+        return _classlist_cache
+    try:
+        result = client.table("classlists") \
+            .select("student_id, name, class") \
+            .execute()
+        for row in (result.data or []):
+            sid = row.get("student_id", "")
+            if sid:
+                _classlist_cache[sid] = {
+                    "name": row.get("name", ""),
+                    "class": row.get("class", ""),
+                }
+    except Exception:
+        pass
+    return _classlist_cache
+
+
+def find_closest_student_id(target_id: str) -> dict | None:
+    """Given a student ID not found in the classlist, find the numerically
+    closest known ID and return {id, name, class, distance}. Returns None
+    if no candidates exist or target_id is not numeric."""
+    if not target_id.isdigit():
+        return None
+    cache = load_classlist_cache()
+    if not cache:
+        return None
+    target_num = int(target_id)
+    best = None
+    best_dist = 10_000_000
+    for known_id, info in cache.items():
+        if known_id.isdigit():
+            dist = abs(int(known_id) - target_num)
+            if dist < best_dist:
+                best_dist = dist
+                best = {
+                    "id": known_id,
+                    "name": info["name"],
+                    "class": info["class"],
+                    "distance": dist,
+                }
+    # Only suggest if within a reasonable range (avoid random matches)
+    if best and best["distance"] <= 100:
+        return best
+    return None
+
+
+def heuristic_extract_name(text: str) -> str:
+    """Attempt to extract a student name from transcribed text using
+    common self-introduction patterns. Returns the name or empty string."""
+    import re
+    patterns = [
+        r"my name is (\w+)",
+        r"my name's (\w+)",
+        r"i'm (\w+)",
+        r"i am (\w+)",
+        r"i am called (\w+)",
+        r"i'm called (\w+)",
+        r"this is (\w+)",
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            raw = m.group(1)
+            name = raw.capitalize()
+            if len(name) >= 2:
+                return name
+    return ""
+
+
+SYSTEM_PROMPT = """CRITICAL RULE — READ TWICE: Transcribe ONLY handwriting that physically exists on the page. ZERO invented content. If the page has blank space, handwriting ends, or the text trails off — you MUST stop. Do NOT continue the student's essay. Do NOT start a new topic. Do NOT write "I went to..." or "I also..." or any continuation. Empty space means nothing to transcribe. Returning empty text is better than guessing.
+
+You are a handwriting transcription tool. Your task is to transcribe handwritten English essays EXACTLY as written — preserve ALL spelling, grammar, and vocabulary errors. You are a transcriber, NOT a proofreader. Do not correct anything.
 
 Rules:
-1. Extract the 5-digit student ID from the ID field on the page.
-2. Transcribe the essay text verbatim.
+1. Extract the 5-digit student ID from the ID field on the page. Do NOT include the ID field, class label, or any demographic header text in the student_text output.
+2. Transcribe ONLY the handwriting on the ruled lines beneath the demographic block. Skip the student ID/class/name header area entirely.
 3. CRITICAL: Insert \\n ONLY at paragraph boundaries. NEVER insert \\n at handwritten line endings. A handwritten line ending is just a page-width wrap, not a paragraph break. The entire page should be transcribed as a single flowing block with \\n only where the writer intended a new paragraph (indentation, blank line, topic change). A letter's salutation ("Dear X,") and closing ("Sincerely," / "See you soon!") are distinct paragraphs; separate them with \\n.
 4. NEVER wrap lines at a fixed character width. Each paragraph reads as one continuous line with no \\n except at paragraph boundaries. If the output has a \\n at every handwritten line, you are doing it WRONG.
 5. Do NOT render crossed-out or deleted text. Skip it entirely.
@@ -82,9 +165,14 @@ Rules:
 7. If the writer used carats (^) or other insertion symbols, insert those words at their intended position so the natural flow of the passage is retained.
 
 Return ONLY a valid JSON object with exactly these keys:
-{"student_id": "5-digit number", "student_text": "the transcribed text with \\n ONLY at paragraph boundaries"}
+{"student_id": "5-digit number", "student_text": "the transcribed text"}
+
+PARAGRAPH BREAKS: Use \\n\\n (double newline) in student_text to separate paragraphs.
+Example of correct output with two paragraphs:
+{"student_id": "12345", "student_text": "First paragraph ends here.\\n\\nSecond paragraph starts on a new line. This paragraph continues."}
 
 REMEMBER: \\n must ONLY appear at paragraph boundaries (indentation, blank line, topic change). Never at handwritten line wraps. Every handwritten line ending should flow into the next word without \\n.
+REMEMBER: The student_text must contain ONLY the essay writing. Do not include any part of the student ID, class, or name fields printed at the top of the page.
 
 No markdown, no code fences, no explanation — raw JSON only."""
 
@@ -251,15 +339,29 @@ def process_student_group(group, folder_name):
             print(f"    Failed to transcribe page {page_path.name}")
             continue
 
-        sid = result.get("student_id", "").strip()
-        text = result.get("student_text", "").strip()
-        # Squash any newlines the model inserted at line-wrap positions
-        text = " ".join(text.split())
+        sid = (result.get("student_id") or "").strip()
+        text = (result.get("student_text") or "").strip()
+        # Normalize literal \n sequences to actual newlines (the model outputs
+        # these when it intends a paragraph break or line wrap in the JSON)
+        text = text.replace("\\n", "\n")
+        # Collapse single newlines (handwritten line wraps) into spaces.
+        # Keep multi-newline runs (\n\n) as paragraph breaks.
+        text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)  # single \n → space
+        text = re.sub(r'\n+', '\n\n', text)            # multi \n → double (parbreak)
+        # Squash runs of spaces within each paragraph, preserve newlines
+        parts = text.split("\n")
+        parts = [" ".join(p.split()) for p in parts]
+        text = "\n".join(parts)
 
         if idx == 1:
             extracted_id = sid if len(sid) == 5 else None
             if not extracted_id:
                 print(f"    Warning: could not extract valid 5-digit student ID from page 1 (got '{sid}')")
+
+        # Reject hallucinated pages: page 2+ must have same student_id as page 1
+        if idx > 1 and extracted_id and sid != extracted_id:
+            print(f"    Warning: page {idx} student_id '{sid}' != page 1 '{extracted_id}' — rejecting as hallucinated")
+            continue
 
         if text:
             page_texts.append(text)
@@ -281,7 +383,25 @@ def process_student_group(group, folder_name):
     if student_info["name"]:
         print(f"    Found student: {student_info['name']} ({student_info['class']})")
     else:
-        print(f"    Student {final_id} not in classlist (M3 cohort or unknown)")
+        # Try ID-based closest match (catch OCR misreads)
+        match = find_closest_student_id(final_id)
+        if match:
+            print(f"    Student {final_id} not in classlist — closest match: {match['id']} ({match['name']}, dist={match['distance']})")
+        # Try text-based name extraction (catch missing Supabase entry)
+        text_name = heuristic_extract_name(combined_text)
+        if text_name:
+            if match:
+                print(f"    Text also suggests name '{text_name}'")
+            else:
+                print(f"    Student {final_id} not in classlist — text suggests name '{text_name}'")
+        if match:
+            student_info["name"] = f"{match['name']}? (closest ID {match['id']})"
+            student_info["class"] = match["class"]
+        elif text_name:
+            student_info["name"] = text_name
+            student_info["class"] = "M3 (suggested)"
+        else:
+            print(f"    Student {final_id} not in classlist (M3 cohort or unknown)")
 
     output = {
         "student_id": final_id,

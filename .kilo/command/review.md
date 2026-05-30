@@ -47,6 +47,14 @@ print('Typst compilation check: PASSED (no convergence warning in output)')
 
 If the Typst compilation produces "layout did not converge" warnings or fails, abort.
 
+## Phase 1c: Preflight check for artificial line breaks
+
+Run after any ingestion to detect handwritten line wraps transcribed as `\n`:
+```bash
+python src/preflight_check.py "FOLDER_NAME"
+```
+If any warnings appear, fix the affected files before proceeding to ERRANT analysis.
+
 ## Phase 2: Uncommitted Changes
 
 ```bash

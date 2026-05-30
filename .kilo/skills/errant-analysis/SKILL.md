@@ -45,6 +45,78 @@ Each output file contains:
 - `summary_type` — `"llm"` or `"local"` (flagged files needing probabilistic rewrite)
 - `error_rate` — `total_edit_count / word_count × 100`
 - `name`, `class` — from the input JSON or Supabase classlist lookup
+- `date_created` — ISO date (YYYY-MM-DD) of when the ERRANT analysis was run; written to the `date` column in the `error_reports` Supabase table on upload
+
+## Supabase interactions
+
+This project uses Supabase for:
+1. **Classlist lookup** — `classlists` table (read via postgrest client)
+2. **Writing error reports** — `error_reports` table (insert via postgrest client)  
+3. **Historical data** — `error_reports` (read via postgrest client)
+4. **DDL / migrations** — `supabase_sql.py` utility (via Management API)
+
+### Environment variables
+
+| Variable | Purpose | How to get |
+|----------|---------|------------|
+| `SUPABASE_URL` | PostgREST endpoint | Supabase Dashboard → Settings → API → Project URL |
+| `SUPABASE_ESL_KEY` | Service role key (anon key also works for reads) | Supabase Dashboard → Settings → API → `service_role` key |
+| `SUPABASE_ACCESS_TOKEN` | Management API token for DDL / migrations | https://supabase.com/dashboard/account/tokens → Generate token → `sbp_...` |
+
+### SQL migrations (DDL)
+
+Do NOT use `psycopg2` or direct DB connection strings. Use the `supabase_sql.py` utility:
+
+```bash
+# Single query
+python src/supabase_sql.py "ALTER TABLE error_reports ADD COLUMN IF NOT EXISTS date DATE;"
+
+# From a SQL file
+python src/supabase_sql.py -f src/setup_error_analysis.py
+
+# Force raw API mode (skip CLI)
+python src/supabase_sql.py --api "SELECT COUNT(*) FROM error_reports;"
+```
+
+The utility auto-detects two modes:
+1. **supabase CLI** (`supabase db query --linked`) — preferred, handles output formatting
+2. **Management API** (`POST /v1/projects/{ref}/database/query`) — fallback
+
+The project must be linked:
+```bash
+supabase link --project-ref <ref>
+```
+
+The project ref is visible in your Supabase Dashboard URL: `https://supabase.com/dashboard/project/hdpwaqprrgnndkgzmnan`.
+
+The linked-project info is stored in `supabase/.temp/linked-project.json`.
+
+### Runtime inserts (error_reports)
+
+The `insert_error_reports()` function in `errant_analysis.py` uses the **postgrest client** (Supabase Python SDK) with `SUPABASE_URL` + `SUPABASE_ESL_KEY`. This is the correct approach for row-level inserts — the Management API is for DDL only.
+
+### Maintaining the migration script (`setup_error_analysis.py`)
+
+`setup_error_analysis.py` defines all ERROR_CODE_COLUMNS (45 error-type columns) plus `date` and `academic_year`. It runs via `supabase_sql.py`:
+
+```bash
+python src/setup_error_analysis.py
+```
+
+When adding new columns, just add them to `NEW_COLUMNS` or `COLUMNS_SQL` lists — no psycopg2 needed.
+
+### Quick reference: running queries
+
+```bash
+# Count rows
+supabase db query --linked "SELECT COUNT(*) FROM error_reports;"
+
+# Check date column
+supabase db query --linked "SELECT student_id, date FROM error_reports LIMIT 5;"
+
+# Via utility
+python src/supabase_sql.py "SELECT * FROM error_reports LIMIT 3;"
+```
 
 ## Prerequisites
 
@@ -55,6 +127,8 @@ python -m spacy download en_core_web_sm
 
 Required env vars:
 - `DEEPSEEK_API_KEY` — correction & summary via deepseek-v4-flash (DeepSeek API direct)
-
-Optional:
 - `SUPABASE_URL` + `SUPABASE_ESL_KEY` — for classlist lookup and Supabase upload (skipped if absent)
+
+Optional but recommended:
+- `SUPABASE_ACCESS_TOKEN` — for schema migrations via Management API
+- `supabase` CLI — for ad-hoc queries and formatted output

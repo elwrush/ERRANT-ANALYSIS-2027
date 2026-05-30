@@ -9,19 +9,19 @@ load_dotenv()
 
 HISTORICAL_DATA = {
     "29689": [
-        {"student_id": "29689", "class": "M3-4A", "name": "Pun", "error_percent": 38, "summary": "Pun has made steady progress this term, reducing errors from 38% to 30%. Keep working on articles and prepositions."},
-        {"student_id": "29689", "class": "M3-4A", "name": "Pun", "error_percent": 35, "summary": "Good improvement! Focus on subject-verb agreement and verb forms."},
-        {"student_id": "29689", "class": "M3-4A", "name": "Pun", "error_percent": 30, "summary": "Solid progress. Main errors are articles and prepositions — keep practicing!"},
+        {"student_id": "29689", "class": "M3-4A", "name": "Pun", "error_percent": 38, "date": "2026-02-10", "summary": "Pun has made steady progress this term, reducing errors from 38% to 30%. Keep working on articles and prepositions."},
+        {"student_id": "29689", "class": "M3-4A", "name": "Pun", "error_percent": 35, "date": "2026-03-01", "summary": "Good improvement! Focus on subject-verb agreement and verb forms."},
+        {"student_id": "29689", "class": "M3-4A", "name": "Pun", "error_percent": 30, "date": "2026-03-22", "summary": "Solid progress. Main errors are articles and prepositions — keep practicing!"},
     ],
     "29720": [
-        {"student_id": "29720", "class": "M3-4A", "name": "Dragon", "error_percent": 18, "summary": "Dragon writes clearly with good vocabulary. Focus on capitalization and word order."},
-        {"student_id": "29720", "class": "M3-4A", "name": "Dragon", "error_percent": 15, "summary": "Improving steadily. Watch out for missing punctuation at sentence ends."},
-        {"student_id": "29720", "class": "M3-4A", "name": "Dragon", "error_percent": 14, "summary": "Good progress. Main areas: spelling of proper nouns and verb form after suggest."},
+        {"student_id": "29720", "class": "M3-4A", "name": "Dragon", "error_percent": 18, "date": "2026-02-10", "summary": "Dragon writes clearly with good vocabulary. Focus on capitalization and word order."},
+        {"student_id": "29720", "class": "M3-4A", "name": "Dragon", "error_percent": 15, "date": "2026-03-01", "summary": "Improving steadily. Watch out for missing punctuation at sentence ends."},
+        {"student_id": "29720", "class": "M3-4A", "name": "Dragon", "error_percent": 14, "date": "2026-03-22", "summary": "Good progress. Main areas: spelling of proper nouns and verb form after suggest."},
     ],
     "35309": [
-        {"student_id": "35309", "class": "M3-4A", "name": "Atom", "error_percent": 45, "summary": "Atom has made significant improvement from 45% to 30%. Keep practicing SVA and spelling."},
-        {"student_id": "35309", "class": "M3-4A", "name": "Atom", "error_percent": 38, "summary": "Getting better! Focus on subject-verb agreement and article usage."},
-        {"student_id": "35309", "class": "M3-4A", "name": "Atom", "error_percent": 30, "summary": "Great improvement! Keep working on spelling and verb forms."},
+        {"student_id": "35309", "class": "M3-4A", "name": "Atom", "error_percent": 45, "date": "2026-02-10", "summary": "Atom has made significant improvement from 45% to 30%. Keep practicing SVA and spelling."},
+        {"student_id": "35309", "class": "M3-4A", "name": "Atom", "error_percent": 38, "date": "2026-03-01", "summary": "Getting better! Focus on subject-verb agreement and article usage."},
+        {"student_id": "35309", "class": "M3-4A", "name": "Atom", "error_percent": 30, "date": "2026-03-22", "summary": "Great improvement! Keep working on spelling and verb forms."},
     ],
 }
 

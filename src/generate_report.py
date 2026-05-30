@@ -256,7 +256,8 @@ def _underline_changes(quote_raw, correction_raw):
 
 
 def render_structured_summary(summary_data):
-    """Deterministically render structured summary_data dict to Typst markup."""
+    """Deterministically render structured summary_data dict to Typst markup.
+    Handles both new format (explanation) and old format (rule/quote/correction)."""
     if not isinstance(summary_data, dict):
         return ""
     
@@ -264,17 +265,67 @@ def render_structured_summary(summary_data):
     errors = summary_data.get("errors", [])
     for err in errors:
         name_cat = esc_typst_markup(err.get("name", ""))
-        rule = esc_typst_markup(err.get("rule", ""))
-        quote_raw = err.get("quote", "")
-        correction_raw = err.get("correction", "")
-        # Strip trailing punctuation from raw strings to avoid doubling
-        quote_raw = quote_raw.rstrip(".,;:!?\"")
-        correction_raw = correction_raw.rstrip(".,;:!?")
-        quote = esc_typst_markup(quote_raw)
-        marked_correction = _underline_changes(quote_raw, correction_raw)
-        parts.append(f"- *{name_cat}:* {rule} You wrote \"{quote}\" but it should be \"{marked_correction}.\"")
+        explanation = err.get("explanation", "")
+        if not explanation:
+            # Fallback to old format fields
+            rule = esc_typst_markup(err.get("rule", ""))
+            quote = esc_typst_markup(err.get("quote", ""))
+            correction = esc_typst_markup(err.get("correction", ""))
+            if rule and quote and correction:
+                # Strip trailing punctuation to avoid doubling when we append
+                q = quote.rstrip(".,;:!?")
+                c = correction.rstrip(".,;:!?")
+                explanation = f"{rule} You wrote \"{q}\" but it should be \"{c}.\""
+            else:
+                explanation = rule
+        else:
+            explanation = esc_typst_markup(explanation)
+        parts.append(f"- *{name_cat}:* {explanation}")
     
     return "\n".join(parts)
+
+
+SHORT_TEXT_MSG = "Your writing was too short to give you error rate feedback. Please write at least 40 words to get a feedback score."
+
+
+def _build_short_text_block(sid, name, cls, word_count, idx):
+    """Typst block for essays < 40 words — shows message instead of full report."""
+    lines = []
+    lines.append('#grid(')
+    lines.append('  columns: (0.8fr, 2fr, 1.2fr),')
+    lines.append('  align: (left + horizon, center + horizon, right + horizon),')
+    lines.append('  image("/images/ACT.png", height: 1.56cm),')
+    lines.append('  text(size: 18pt, weight: "bold")[Mathayom Program],')
+    lines.append('  image("/images/cambridge.png", height: 2.2cm),')
+    lines.append(')')
+    lines.append('#line(length: 100%, stroke: 1.0pt)')
+    lines.append('')
+    lines.append('#v(1em)')
+    lines.append('')
+    lines.append('#align(center, text(size: 16pt, weight: "bold")[Writing Accuracy Feedback Report])')
+    lines.append(f'#align(center, text(size: 12pt)[{name} - {sid} - {cls}])')
+    lines.append('')
+    lines.append('#v(3em)')
+    lines.append('')
+    lines.append(f'#text(size: 14pt, fill: gray)[{SHORT_TEXT_MSG}]')
+    lines.append('')
+    lines.append('#v(2em)')
+    lines.append(f'#text(size: 11pt)[(Word count: {word_count})]')
+    lines.append('')
+    # Pad to 4 pages
+    lines.append(f'#let rest-pages-{idx} = state("rest-pages-{idx}", 0)')
+    lines.append(f'#box(width: 0pt) <pad-anchor-{idx}>')
+    lines.append('#context {')
+    lines.append(f'  let num = counter(page).at(label("pad-anchor-{idx}")).first()')
+    lines.append('  let rem = calc.rem-euclid(4 - num, 4)')
+    lines.append(f'  rest-pages-{idx}.update(rem)')
+    lines.append('}')
+    lines.append('#context {')
+    lines.append(f'  for _ in range(rest-pages-{idx}.final()) {{')
+    lines.append('    page([])')
+    lines.append('  }')
+    lines.append('}')
+    return "\n".join(lines) + "\n"
 
 
 def build_student_block(student, idx):
@@ -282,7 +333,12 @@ def build_student_block(student, idx):
     raw_name = student.get("name", sid)
     name = esc(raw_name)
     cls = esc(student.get("class", ""))
-    
+    word_count = student.get("word_count", 0)
+
+    # Short-essay path: show message instead of full report
+    if word_count < 40:
+        return _build_short_text_block(sid, raw_name, cls, word_count, idx)
+
     # Use structured summary_data if available, else fall back to plain summary text
     summary_data = student.get("summary_data")
     if isinstance(summary_data, dict) and summary_data.get("errors"):
@@ -307,11 +363,11 @@ def build_student_block(student, idx):
 
     # Use corrected_typst if available, else use corrected_text as plain text
     markup = student.get("corrected_typst", student.get("corrected_with_markup", student.get("corrected_text", "")))
-    marked = markup.replace("\n", "\n\n")
-
-    # Original uncorrected text
+    marked = re.sub(r'\n+', '\n\n', markup)
+    
+    # Original text — escape for Typst, collapse multiple newlines to double (Typst paragraph break)
     orig = student.get("original_text", "")
-    orig_escaped = esc(orig).replace("\n", "\n\n")
+    orig_escaped = re.sub(r'\n+', '\n\n', esc(orig))
 
     lines = []
 
@@ -427,12 +483,10 @@ B2_TARGET = 7
 
 
 def _infer_cefr_level(class_name):
-    """Infer CEFR level from class name. M3 ~ B1, M4+ ~ B2, default B1."""
+    """Infer CEFR level from class name. All M3+ classes are B2."""
     cn = class_name.upper()
-    if cn.startswith("M4") or cn.startswith("M5") or cn.startswith("M6"):
+    if cn.startswith("M3") or cn.startswith("M4") or cn.startswith("M5") or cn.startswith("M6"):
         return "B2"
-    if cn.startswith("M3"):
-        return "B1"
     return "B1"
 
 
@@ -442,8 +496,8 @@ def generate_chart(student, data_points):
     import matplotlib.pyplot as plt
 
     rates = [p["error_percent"] for p in data_points]
-    # Try submission_date first (fallback), then created_at (Supabase)
-    labels = [_format_date(p.get("submission_date", p.get("created_at", ""))) for p in data_points]
+    # submission_date is populated from the date column in fetch_historical_data
+    labels = [_format_date(p.get("submission_date", "")) for p in data_points]
     rates.append(student["error_rate"])
     labels.append(date.today().strftime("%b %-d") if os.name != "nt" else date.today().strftime("%b %d").lstrip("0").replace("  ", " "))
 
@@ -496,14 +550,14 @@ def fetch_historical_data(student_id):
         if url and key:
             client = create_client(url, key)
             result = client.table("error_reports")\
-                .select("created_at, error_percent")\
+                .select("date, error_percent")\
                 .eq("student_id", student_id)\
-                .order("created_at")\
+                .order("date")\
                 .execute()
             if result.data:
-                # Rename created_at to submission_date for uniform handling
+                # Rename date to submission_date for uniform handling
                 for d in result.data:
-                    d.setdefault("submission_date", d.pop("created_at", ""))
+                    d.setdefault("submission_date", d.pop("date", ""))
                 return result.data[-4:]
     except Exception:
         pass
@@ -554,7 +608,10 @@ def main():
         data_points = fetch_historical_data(sid)
         print(f"    Historical data: {len(data_points)} point(s)")
 
-        generate_chart(student, data_points)
+        if student.get("error_rate") is not None:
+            generate_chart(student, data_points)
+        else:
+            print(f"    Skipping chart — essay too short ({student.get('word_count', 0)} words)")
         class_name = cls.replace("/", "-").replace("\\", "-")
         students.append(student)
 
