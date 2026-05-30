@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 local-working/
 outputs/
+PDF/
+inputs/
+supabase/.temp/
 tavily_*.json
 tmp_*.py
 benchmark_models.py
