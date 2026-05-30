@@ -38,13 +38,18 @@ MAX_OUTPUT_TOKENS = 4096
 MISSING_STUDENT_IDS: dict[str, list[str]] = {}
 
 # Whole-text correction prompt — minimal edits: fix errors, don't rewrite
-CORRECTION_PROMPT = """Fix the text below.
+CORRECTION_PROMPT = """Fix ONLY grammar, spelling, and capitalization errors. Do NOT rewrite, rephrase, or restructure.
 
 CRITICAL RULES:
-- the writing must not be overly embellished or changed. You are a proofreader, not an editor. The acid test is that the outputted writing is perfectly grammatical, but semantically as similar as possible.
+- Do NOT delete words unless clearly duplicated or wrong (e.g. "world wide" → "worldwide")
+- Do not merge or split sentences. Do not reorder clauses.
+- Fix punctuation to academic English standards: no fused sentences, run-ons, comma splices, or stringy sentences. Use periods or semicolons to separate independent clauses.
+- Fix capitalization: sentence starts, proper nouns, pronoun "I"
+- Fix missing words: add auxiliary verbs, articles, prepositions when needed. Take special care with singular/plural nouns ("I enjoy playing drums", not "I enjoy playing drum".)
+- Fix word forms: use correct adverb forms ("good" → "well"), verb forms ("help putting" → "help put"), and pluralization.
 - Preserve original paragraph breaks
-- Fix punctuation to academic English standards: no fused sentences, run-ons, comma splices, or stringy sentences.
-- Fix missing words: add auxiliary verbs, articles, prepositions when needed. Take special care to ensure singular and plural nouns are used properly ("I enjoy playing drums", not "I enjoy playing drum".)
+- Convert & to "and" where it represents the word "and"
+- Only change: verb tense, subject-verb agreement, articles, prepositions, spelling, capitalization, punctuation, word forms, missing words, & → and
 - At the most minimal level, repair gibberish. Do not do extravagant rewriting.
 
 Original text:
@@ -332,7 +337,7 @@ def _sanitize_unicode(text):
 
 SUMMARY_PROMPT_FMT = """You are an experienced ESL writing teacher. A student ({name}, CEFR B1 level, error rate: {error_rate}%) wrote the original text below. A corrected version is also provided.
 
-Identify the 3 most important errors. For each, write a short, encouraging explanation at CEFR B1 level — simple, direct language.
+Identify the 3 most important errors. For each, write a short, encouraging explanation. Use simple concepts but correct, natural English — you are a proficient teacher.
 
 Use this exact JSON format. The example errors are for illustration — replace with the student's actual errors:
 
@@ -356,9 +361,9 @@ Use this exact JSON format. The example errors are for illustration — replace 
 }}
 
 CRITICAL RULES:
+- Your feedback itself must be written in correct, natural English. You are a proficient teacher — write clearly and accurately. "Simple" means the concepts are easy to follow, not that your own grammar can be sloppy.
 - Every phrase in double quotes within the explanation must appear verbatim in the original text below.
 - Do NOT change, rephrase, or invent the student's words.
-- Keep language simple and direct — explain like a teacher talking to a B1 learner.
 - Explain why it is wrong and how to fix it, with a natural example.
 
 ORIGINAL TEXT:
