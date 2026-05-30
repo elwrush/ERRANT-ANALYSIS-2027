@@ -38,18 +38,13 @@ MAX_OUTPUT_TOKENS = 4096
 MISSING_STUDENT_IDS: dict[str, list[str]] = {}
 
 # Whole-text correction prompt — minimal edits: fix errors, don't rewrite
-CORRECTION_PROMPT = """Fix ONLY grammar, spelling, and capitalization errors. Do NOT rewrite, rephrase, or restructure.
+CORRECTION_PROMPT = """Fix the text below.
 
 CRITICAL RULES:
-- Do NOT delete words unless clearly duplicated or wrong (e.g. "world wide" → "worldwide")
-- Do not merge or split sentences. Do not reorder clauses.
-- Fix punctuation to academic English standards: no fused sentences, run-ons, comma splices, or stringy sentences. Use periods or semicolons to separate independent clauses.
-- Fix capitalization: sentence starts, proper nouns, pronoun "I"
-- Fix missing words: add auxiliary verbs, articles, prepositions when needed. Take special care with singular/plural nouns ("I enjoy playing drums", not "I enjoy playing drum".)
-- Fix word forms: use correct adverb forms ("good" → "well"), verb forms ("help putting" → "help put"), and pluralization.
+- the writing must not be overly embellished or changed. You are a proofreader, not an editor. The acid test is that the outputted writing is perfectly grammatical, but semantically as similar as possible.
 - Preserve original paragraph breaks
-- Convert & to "and" where it represents the word "and"
-- Only change: verb tense, subject-verb agreement, articles, prepositions, spelling, capitalization, punctuation, word forms, missing words, & → and
+- Fix punctuation to academic English standards: no fused sentences, run-ons, comma splices, or stringy sentences.
+- Fix missing words: add auxiliary verbs, articles, prepositions when needed. Take special care to ensure singular and plural nouns are used properly ("I enjoy playing drums", not "I enjoy playing drum".)
 - At the most minimal level, repair gibberish. Do not do extravagant rewriting.
 
 Original text:
