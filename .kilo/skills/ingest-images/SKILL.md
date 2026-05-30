@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Transcribe handwritten student essays from scanned images into structured JSON using a vision language model (Gemini 2.5 Flash Lite Preview) via OpenRouter. Handles multi-page essays and rate-limited serial processing.
+Transcribe handwritten student essays from scanned images into structured JSON using a vision language model (Gemini 2.5 Flash) via OpenRouter. Handles multi-page essays and rate-limited serial processing.
 
 ## Prerequisites
 
@@ -154,7 +154,7 @@ After extracting the student ID from the page, the script queries the Supabase `
 | Config | Value |
 |--------|-------|
 | Provider | OpenRouter |
-| Model | `google/gemini-2.5-flash-lite-preview-09-2025` |
+| Model | `google/gemini-2.5-flash` |
 | Input price | $0.10 / 1M tokens |
 | Output price | $0.40 / 1M tokens |
 | Measured cost | ~$0.03 / 100 images (benchmark) |
@@ -180,7 +180,7 @@ After extracting the student ID from the page, the script queries the Supabase `
 
 ## Page Joining
 
-Multi-page essays are joined with a single space (`" "`) between pages, never with `\n`. This ensures that a paragraph running continuously across pages does not get an artificial line break. Additionally, all `\n` within each page's transcription are collapsed to spaces in post-processing — the model is unreliable at distinguishing handwritten line wraps from paragraph breaks, so paragraph structure is determined solely by the page joining logic.
+Multi-page essays are joined with a single space (`" "`) between pages, never with `\n`. This ensures that a paragraph running continuously across pages does not get an artificial line break. Additionally, single `\n` within each page's transcription are collapsed to spaces in post-processing — double `\n\n` (paragraph breaks) are preserved. The model is unreliable at distinguishing handwritten line wraps from paragraph breaks.
 
 ## Rate Limiting
 

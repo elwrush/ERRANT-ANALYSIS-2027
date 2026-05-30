@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Takes transcribed student essays (`outputs/{folder}/{student_id}.json`), runs sentence-by-sentence correction via DeepSeek V4 Flash (deepseek-v4-flash), compares original vs corrected with ERRANT for structured error classification, generates personalised AI summaries via DeepSeek V4 Flash (non-thinking mode), and saves results to `local-working/`.
+Takes transcribed student essays (`outputs/{folder}/{student_id}.json`), runs whole-text correction via DeepSeek V4 Flash (deepseek-v4-flash), compares original vs corrected with ERRANT for structured error classification, generates personalised AI summaries via DeepSeek V4 Flash (non-thinking mode), and saves results to `local-working/`.
 
 ## Usage
 
@@ -42,7 +42,7 @@ Each output file contains:
 - `errant_analysis.errors[]` — error types with counts and context spans
 - `sentence_pairs[]` — aligned original/corrected sentence pairs
 - `summary` — personalised feedback with hallucination-verified examples
-- `summary_type` — `"llm"` or `"local"` (flagged files needing probabilistic rewrite)
+- `summary_type` — `"llm"` or `"empty"` (empty on parse failure; no deterministic fallback)
 - `error_rate` — `total_edit_count / word_count × 100`
 - `name`, `class` — from the input JSON or Supabase classlist lookup
 - `date_created` — ISO date (YYYY-MM-DD) of when the ERRANT analysis was run; written to the `date` column in the `error_reports` Supabase table on upload

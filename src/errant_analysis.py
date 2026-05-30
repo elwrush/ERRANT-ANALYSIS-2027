@@ -330,9 +330,9 @@ def _sanitize_unicode(text):
 
 
 
-SUMMARY_PROMPT_FMT = """You are an experienced ESL writing teacher. A student ({name}, CEFR B1 level, error rate: {error_rate}%) wrote the original text below. A corrected version is also provided.
+SUMMARY_PROMPT_FMT = """You are an experienced ESL writing teacher. A student ({name}, CEFR B1 level) wrote the original text below. A corrected version is also provided.
 
-Identify the 3 most important errors. For each, write a short, encouraging explanation. Use simple concepts but correct, natural English — you are a proficient teacher.
+Identify the 3 most important errors in the student's original writing. Write your explanations and corrections to academic English standards — no comma splices, fused sentences, or sentence fragments.
 
 Use this exact JSON format. The example errors are for illustration — replace with the student's actual errors:
 
@@ -346,17 +346,16 @@ Use this exact JSON format. The example errors are for illustration — replace 
     }},
     {{
       "name": "Sentence fragment",
-      "explanation": "You wrote \\"In my free time.\\" with a full stop, but this group of words is not a complete sentence because it has no main verb. You cannot put a full stop here. Instead, connect it to your next sentence. For example: \\"In my free time, I love to play computer games with my friend.\\""
+      "explanation": "You wrote \\"In my free time.\\" with a full stop, but this group of words is not a complete sentence because it has no main verb. You cannot put a full stop here. Instead, connect it to your next sentence. For example: \\"In my free time, I love to play computer games with my friends.\\""
     }},
     {{
       "name": "Comma splice",
-      "explanation": "You wrote \\"I love to play computer games with my friend, I am always learning\\" which is two complete thoughts joined by only a comma. Add a connecting word like 'and' after the comma: \\"I love to play computer games with my friend, and I am always learning.\\""
+      "explanation": "You wrote \\"I love to play computer games with my friends, I am always learning\\" which is two complete thoughts joined by only a comma. Add a connecting word like 'and' after the comma: \\"I love to play computer games with my friends, and I am always learning.\\""
     }}
   ]
 }}
 
 CRITICAL RULES:
-- Your feedback itself must be written in correct, natural English. You are a proficient teacher — write clearly and accurately. "Simple" means the concepts are easy to follow, not that your own grammar can be sloppy.
 - Every phrase in double quotes within the explanation must appear verbatim in the original text below.
 - Do NOT change, rephrase, or invent the student's words.
 - Explain why it is wrong and how to fix it, with a natural example.
@@ -427,10 +426,8 @@ def generate_summary(output: dict) -> dict:
     original_text = output.get("original_text", "")
     corrected_text = output.get("corrected_text", "")
 
-    er_display = output["error_rate"] if output["error_rate"] is not None else "N/A"
     prompt = SUMMARY_PROMPT_FMT.format(
         name=name,
-        error_rate=er_display,
         original_text=original_text,
         corrected_text=corrected_text,
     )
