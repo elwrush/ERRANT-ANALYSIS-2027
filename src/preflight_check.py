@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Preflight check: scan output JSONs for artificial line breaks (handwritten line wraps)."""
-import json, glob, sys, re
+import json
+import glob
+import sys
 
 def check_file(fp):
     with open(fp) as f:

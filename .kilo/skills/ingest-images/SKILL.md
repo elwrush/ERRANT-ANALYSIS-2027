@@ -77,35 +77,35 @@ Use the `question` tool to gather `--folder` and `--pages` from the user, then r
 
 After ingestion completes, you **must** verify all extracted student IDs with the human before proceeding to any downstream step (ERRANT analysis, Supabase upload, report generation).
 
-1. **Build the mapping** — After the script finishes, retrieve the `source_images` from each output JSON and the corresponding `student_id` to produce a complete image→ID map. Use:
-   ```bash
-   Get-ChildItem "outputs/{folder}/*.json" | ForEach-Object {
-     $data = Get-Content $_ | ConvertFrom-Json
-     "$($data.source_images[0]) -> $($data.student_id) ($($data.name))"
-   }
+**Ghost files are a hard block.** The ingestion script now writes a `GHOST_REPORT.txt` to the output folder when any student ID is not found in the classlist. The ERRANT analysis script will **refuse to run** if this file exists. You must resolve all ghosts before the pipeline continues.
+
+1. **Read the ghost report** — After ingestion, check for ghosts printed to the console (bold exclamation-mark section) and `GHOST_REPORT.txt`. Each ghost entry includes:
+   - The extracted student ID
+   - The source image filename
+   - The closest classlist match (with Levenshtein distance)
+   - Any text-suggested name from the essay body
+
+2. **Present ghosts to the user immediately** — Do NOT bury this in console output. Use the `question` tool front-and-center:
+   ```
+   GHOST FILES — not in classlist:
+     ID=29544 → img-529090850-0027.jpg (closest: 29547 Proud, dist=3)
+     ID=30042 → img-529090850-0031.jpg (closest: 30055 Jomtub, dist=13)  
+     ID=34774 → img-529090850-0035.jpg (text suggests "Krabi")
+
+   These cannot proceed to ERRANT analysis. 
+   What are the correct student IDs?
    ```
 
-2. **Highlight problems** — Identify any student IDs that are NOT in the Supabase classlist (those with empty `name` and `class` fields). Flag them as potential misreads.
+3. **Apply corrections (DO NOT DELETE THE JSON)** — When the user provides the correct ID for each ghost:
+   - **Rename** the output JSON file from the wrong ID to the correct ID
+   - **Update** the `student_id` field inside the JSON to the correct value
+   - **Update** `name` and `class` fields from the classlist or user-provided values
+   - **Never delete ghost JSONs** — the transcription text inside them is valuable and re-transcribing costs API credits
+   - Repeat for all ghosts
 
-3. **Present to user** — Use the `question` tool to show the full mapping and ask for confirmation or corrections. Example:
-   ```
-   Ingested 16 files from M2-4A BASELINE:
-     img-0001.jpg → 30570 (Aton)
-     img-0002.jpg → 36127 (Pang Pang)
-     ...
-     img-0005.jpg → 36717 (?? NOT in classlist)
-     img-0009.jpg → 38995 (?? NOT in classlist)
+4. **Delete GHOST_REPORT.txt** — Once ALL ghost IDs are resolved, delete the `GHOST_REPORT.txt` file. This is the signal to the ERRANT analysis script that it can proceed.
 
-   2 IDs not found in classlist (may be misreads or missing from roster):
-     img-0005.jpg → 36717
-     img-0009.jpg → 38995
-
-   Do any IDs need correcting?
-   ```
-
-4. **Apply corrections** — If the user corrects an ID, update the ingestion JSON file immediately (rename file and fix `student_id`, `name`, `class` fields).
-
-5. **Proceed only after sign-off** — Do not run ERRANT analysis, Supabase uploads, or report generation until the user has confirmed the IDs are correct.
+5. **Proceed only after all ghosts are resolved** — ERRANT analysis, Supabase uploads, and report generation are all blocked until GHOST_REPORT.txt is gone.
 
 ### Preflight line-break check
 
@@ -191,5 +191,7 @@ Multi-page essays are joined with a single space (`" "`) between pages, never wi
 
 ## Pipeline handoff
 
-After the user signs off on the IDs, the pipeline proceeds to ERRANT analysis.
-Do **not** skip the ID verification step — misread student IDs are the most common source of downstream errors.
+After ingestion, `GHOST_REPORT.txt` is written if any student IDs are not in the classlist. This file contains the image filename, extracted ID, closest classlist match, and text-suggested names. The ERRANT analysis script will refuse to run until this file is deleted.
+
+After the user resolves all ghosts and deletes `GHOST_REPORT.txt`, the pipeline proceeds to ERRANT analysis.
+Do **not** skip ghost resolution — misread student IDs cause downstream records to be attributed to the wrong students.

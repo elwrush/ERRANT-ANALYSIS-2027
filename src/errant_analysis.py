@@ -330,7 +330,7 @@ def _sanitize_unicode(text):
 
 
 
-SUMMARY_PROMPT_FMT = """You are an experienced ESL writing teacher. A student ({name}, CEFR B1 level) wrote the original text below. A corrected version is also provided.
+SUMMARY_PROMPT_FMT = """You are an experienced ESL writing teacher. A student ({name}, CEFR B1-B2 level) wrote the original text below. A corrected version is also provided.
 
 Identify the 3 most important errors in the student's original writing. Write your explanations and corrections to academic English standards — no comma splices, fused sentences, or sentence fragments.
 
@@ -1170,6 +1170,19 @@ if __name__ == "__main__":
                 print(f"No files found in folder '{folder_filter}'")
                 sys.exit(1)
             print(f"Filtered to {len(files)} file(s) in '{folder_filter}'")
+
+            # Ghost file check — block if GHOST_REPORT.txt exists
+            ghost_report = OUTPUTS_DIR / folder_filter / "GHOST_REPORT.txt"
+            if ghost_report.exists():
+                print(f"\n{'!'*60}")
+                print("  GHOST FILES STILL PRESENT — cannot proceed with ERRANT analysis")
+                print(f"{'!'*60}")
+                print(f"  Ghost report found: {ghost_report}")
+                print("  These student IDs were not found in the classlist.")
+                print("  Fix the IDs in the JSON files, then delete GHOST_REPORT.txt.")
+                print("  Then re-run this command.")
+                print(f"{'!'*60}")
+                sys.exit(1)
         if not files:
             print(f"No JSON files found in {OUTPUTS_DIR}/")
             print("Run ingest-images first to produce output files.")

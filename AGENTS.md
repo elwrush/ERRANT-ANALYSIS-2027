@@ -48,7 +48,7 @@ This project runs on Windows PowerShell 5.1.
 |------|-------|----------|-----------|------------|
 | Correction | `deepseek-v4-flash` | DeepSeek API | $0.14 | $0.28 |
 | Summary | `deepseek-v4-flash` | DeepSeek API | $0.14 | $0.28 |
-| Ingestion | `google/gemini-2.5-flash` | OpenRouter | | |
+| Ingestion | `google/gemini-2.5-flash` | OpenRouter | $0.10 | $0.40 |
 
 Correction runs at temperature 0.6 (non-thinking mode). Summary runs at 0.8 (non-thinking mode). Full pipeline cost: ~$0.00039 per student.
 
@@ -135,7 +135,7 @@ All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the Su
 - Ingestion output: `outputs/{folder}/{student_id}.json` with keys `student_id` and `student_text`
 - Research prep output: `outputs/research/{record_id}.json` with per-record metadata (one file per student writing submission)
 - ERRANT output: `local-working/{folder}-{record_id}.json` with full error analysis, sentence pairs, Typst-native `corrected_typst` field, metadata, and record metadata
-- Multi-page essays combined into a single JSON, pages joined with `\n`
+- Multi-page essays combined into a single JSON, pages joined with a single space (never a newline)
 - API key: `DEEPSEEK_API_KEY` in `.env` or environment; `OPENROUTER_API_KEY` for ingestion
 
 ## Transcription rules (enforced by prompt)

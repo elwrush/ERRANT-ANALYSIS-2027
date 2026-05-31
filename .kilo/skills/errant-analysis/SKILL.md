@@ -20,7 +20,9 @@ Processes all JSON files in `outputs/` with 5 parallel workers. Optional folder 
 
 ### Agent workflow
 
-**Prerequisite:** Ingestion outputs must have their student IDs verified by the human (see `ingest-images` skill — "ID verification sign-off" section). Do not proceed if IDs haven't been confirmed.
+**Prerequisite:** Ingestion outputs must have their student IDs verified by the human (see `ingest-images` skill — "ID verification sign-off" section). **All ghost files must be resolved and `GHOST_REPORT.txt` deleted from the output folder.** The batch script will refuse to run if ghosts remain.
+
+**Ghost-file gate:** The script checks for `outputs/{folder}/GHOST_REPORT.txt` before processing. If found, it prints a hard error and exits with code 1. Resolve all ghost IDs and delete the report file before retrying.
 
 Use the `question` tool to ask the user which folder to process, then run:
 ```bash

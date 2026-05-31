@@ -288,56 +288,12 @@ def render_structured_summary(summary_data):
 SHORT_TEXT_MSG = "Your writing was too short to give you error rate feedback. Please write at least 40 words to get a feedback score."
 
 
-def _build_short_text_block(sid, name, cls, word_count, idx):
-    """Typst block for essays < 40 words — shows message instead of full report."""
-    lines = []
-    lines.append('#grid(')
-    lines.append('  columns: (0.8fr, 2fr, 1.2fr),')
-    lines.append('  align: (left + horizon, center + horizon, right + horizon),')
-    lines.append('  image("/images/ACT.png", height: 1.56cm),')
-    lines.append('  text(size: 18pt, weight: "bold")[Mathayom Program],')
-    lines.append('  image("/images/cambridge.png", height: 2.2cm),')
-    lines.append(')')
-    lines.append('#line(length: 100%, stroke: 1.0pt)')
-    lines.append('')
-    lines.append('#v(1em)')
-    lines.append('')
-    lines.append('#align(center, text(size: 16pt, weight: "bold")[Writing Accuracy Feedback Report])')
-    lines.append(f'#align(center, text(size: 12pt)[{name} - {sid} - {cls}])')
-    lines.append('')
-    lines.append('#v(3em)')
-    lines.append('')
-    lines.append(f'#text(size: 14pt, fill: gray)[{SHORT_TEXT_MSG}]')
-    lines.append('')
-    lines.append('#v(2em)')
-    lines.append(f'#text(size: 11pt)[(Word count: {word_count})]')
-    lines.append('')
-    # Pad to 4 pages
-    lines.append(f'#let rest-pages-{idx} = state("rest-pages-{idx}", 0)')
-    lines.append(f'#box(width: 0pt) <pad-anchor-{idx}>')
-    lines.append('#context {')
-    lines.append(f'  let num = counter(page).at(label("pad-anchor-{idx}")).first()')
-    lines.append('  let rem = calc.rem-euclid(4 - num, 4)')
-    lines.append(f'  rest-pages-{idx}.update(rem)')
-    lines.append('}')
-    lines.append('#context {')
-    lines.append(f'  for _ in range(rest-pages-{idx}.final()) {{')
-    lines.append('    page([])')
-    lines.append('  }')
-    lines.append('}')
-    return "\n".join(lines) + "\n"
-
-
 def build_student_block(student, idx):
     sid = student["student_id"]
     raw_name = student.get("name", sid)
     name = esc(raw_name)
     cls = esc(student.get("class", ""))
     word_count = student.get("word_count", 0)
-
-    # Short-essay path: show message instead of full report
-    if word_count < 40:
-        return _build_short_text_block(sid, raw_name, cls, word_count, idx)
 
     # Use structured summary_data if available, else fall back to plain summary text
     summary_data = student.get("summary_data")
@@ -410,6 +366,9 @@ def build_student_block(student, idx):
     lines.append("#v(0.5em)")
     lines.append("")
     lines.append('#image("/outputs/charts/' + sid + '.png", width: 80%)')
+    if word_count < 40:
+        lines.append('#v(0.6em)')
+        lines.append(f'#text(size: 11pt)[{SHORT_TEXT_MSG} (You wrote {word_count} words.)]')
     lines.append(']')
     lines.append("")
     lines.append('#v(1em)')
@@ -504,6 +463,8 @@ def generate_chart(student, data_points):
     fig, ax = plt.subplots(figsize=(5, 2.5))
     ax.plot(labels, rates, marker="o", linestyle="-", linewidth=2, color="#2563eb")
     for i, (lb, r) in enumerate(zip(labels, rates)):
+        if r is None:
+            continue
         ax.annotate(f"{r}%", (lb, r), textcoords="offset points", xytext=(0, 10),
                     ha="center", fontsize=8, color="#2563eb")
 
@@ -511,7 +472,8 @@ def generate_chart(student, data_points):
     target = B1_TARGET if level == "B1" else B2_TARGET
     label = f"Target ({level})"
 
-    max_val = max(max(rates) + 10, target + 5)
+    valid_rates = [r for r in rates if r is not None]
+    max_val = max(max(valid_rates) + 10, target + 5) if valid_rates else target + 5
     ax.set_ylim(0, max_val)
 
     # Shade region below target in light gray
@@ -608,10 +570,7 @@ def main():
         data_points = fetch_historical_data(sid)
         print(f"    Historical data: {len(data_points)} point(s)")
 
-        if student.get("error_rate") is not None:
-            generate_chart(student, data_points)
-        else:
-            print(f"    Skipping chart — essay too short ({student.get('word_count', 0)} words)")
+        generate_chart(student, data_points)
         class_name = cls.replace("/", "-").replace("\\", "-")
         students.append(student)
 

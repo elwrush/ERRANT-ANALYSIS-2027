@@ -7,6 +7,7 @@ import time
 import random
 import base64
 import argparse
+from datetime import date
 from io import BytesIO
 from pathlib import Path
 from PIL import Image
@@ -42,6 +43,9 @@ JITTER_MIN = 0.5
 JITTER_MAX = 2.0
 MAX_RETRIES = 5
 REQUEST_TIMEOUT = 30
+
+# Ghost file tracking: { student_id: { "image": filename, "closest_match": {...}, "text_name": "..." } }
+GHOST_STUDENTS: dict[str, dict] = {}
 
 
 def get_supabase_client():
@@ -358,10 +362,10 @@ def process_student_group(group, folder_name):
             if not extracted_id:
                 print(f"    Warning: could not extract valid 5-digit student ID from page 1 (got '{sid}')")
 
-        # Reject hallucinated pages: page 2+ must have same student_id as page 1
-        if idx > 1 and extracted_id and sid != extracted_id:
-            print(f"    Warning: page {idx} student_id '{sid}' != page 1 '{extracted_id}' — rejecting as hallucinated")
-            continue
+        # Page 2+ never has a student ID written on it — ignore the model's
+        # student_id for continuation pages and just use page 1's ID.
+        if idx > 1 and extracted_id and sid != extracted_id and len(sid) == 5:
+            print(f"    Warning: page {idx} returned different 5-digit ID '{sid}' (page 1 had '{extracted_id}') — text kept but ID possibly hallucinated")
 
         if text:
             page_texts.append(text)
@@ -383,10 +387,12 @@ def process_student_group(group, folder_name):
     if student_info["name"]:
         print(f"    Found student: {student_info['name']} ({student_info['class']})")
     else:
+        ghost_entry = {"image": page_paths[0].name if page_paths else "unknown"}
         # Try ID-based closest match (catch OCR misreads)
         match = find_closest_student_id(final_id)
         if match:
             print(f"    Student {final_id} not in classlist — closest match: {match['id']} ({match['name']}, dist={match['distance']})")
+            ghost_entry["closest_match"] = match
         # Try text-based name extraction (catch missing Supabase entry)
         text_name = heuristic_extract_name(combined_text)
         if text_name:
@@ -394,14 +400,20 @@ def process_student_group(group, folder_name):
                 print(f"    Text also suggests name '{text_name}'")
             else:
                 print(f"    Student {final_id} not in classlist — text suggests name '{text_name}'")
+            ghost_entry["text_name"] = text_name
         if match:
             student_info["name"] = f"{match['name']}? (closest ID {match['id']})"
             student_info["class"] = match["class"]
         elif text_name:
             student_info["name"] = text_name
-            student_info["class"] = "M3 (suggested)"
+            # Extract class from folder name (e.g. "M3-3A-assignment-2" → "M3-3A")
+            m = re.match(r'([MUS]\d-\d[A-Za-z]+)', folder_name)
+            student_info["class"] = m.group(1) if m else folder_name
         else:
             print(f"    Student {final_id} not in classlist (M3 cohort or unknown)")
+        # Track this ghost with class for the report
+        ghost_entry["class"] = student_info.get("class") or folder_name
+        GHOST_STUDENTS[final_id] = ghost_entry
 
     output = {
         "student_id": final_id,
@@ -504,6 +516,48 @@ def main():
     print(f"\n{'='*50}")
     print(f"Done. Processed {len(results)}/{len(groups)} students.")
     print(f"Output: {OUTPUTS_DIR / selected.name}/")
+
+    # Ghost report
+    if GHOST_STUDENTS:
+        print(f"\n{'!'*60}")
+        print(f"  GHOST FILES DETECTED — {len(GHOST_STUDENTS)} student ID(s) not found in classlist")
+        print(f"{'!'*60}")
+        print("  These files have placeholder names. They will NOT be processed")
+        print("  further (ERRANT, Supabase, PDF) until the IDs are fixed.")
+        print()
+        print(f"  {'Class':<17} {'Suspected ID':<14} {'Image':<32}")
+        print(f"  {'-'*63}")
+        for sid, info in sorted(GHOST_STUDENTS.items()):
+            cls = info.get("class", "?")
+            print(f"  {cls:<17} {sid:<14} {info['image']:<32}")
+
+        # Write ghost report file
+        ghost_report_path = OUTPUTS_DIR / selected.name / "GHOST_REPORT.txt"
+        with open(ghost_report_path, "w", encoding="utf-8") as gr:
+            gr.write(f"GHOST FILES REPORT — {date.today().isoformat()}\n")
+            gr.write(f"Folder: {selected.name}\n")
+            gr.write(f"{'='*60}\n\n")
+            gr.write(f"{len(GHOST_STUDENTS)} student ID(s) not found in classlist:\n\n")
+            for sid, info in sorted(GHOST_STUDENTS.items()):
+                gr.write(f"  ID: {sid}\n")
+                gr.write(f"  Image: {info['image']}\n")
+                if "closest_match" in info:
+                    m = info["closest_match"]
+                    gr.write(f"  Closest match: {m['id']} ({m['name']}, dist={m['distance']})\n")
+                if "text_name" in info:
+                    gr.write(f"  Text suggests name: {info['text_name']}\n")
+                gr.write(f"  JSON file: {sid}.json\n")
+                gr.write("\n")
+            gr.write("\nACTION REQUIRED:\n")
+            gr.write("  1. Verify the student's actual ID\n")
+            gr.write(f"  2. Update the JSON file in {OUTPUTS_DIR / selected.name}/ with the correct student_id\n")
+            gr.write("  3. Delete this GHOST_REPORT.txt when all IDs are fixed\n")
+        print(f"\n  Full report saved to: {ghost_report_path}")
+        print("\n  ACTION REQUIRED:")
+        print("    1. Verify each student's actual ID (check the image or classlist)")
+        print("    2. Update the corresponding JSON file with the correct student_id")
+        print("    3. Re-run ERRANT analysis after all IDs are fixed")
+        print(f"{'!'*60}")
     print(f"{'='*50}")
 
 

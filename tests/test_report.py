@@ -63,11 +63,12 @@ class TestShortText:
         }
         result = build_student_block(sample, 0)
         assert isinstance(result, str)
+        # Short text message appears as a note below the chart (not a separate block)
         assert SHORT_TEXT_MSG in result
+        assert "(You wrote 25 words.)" in result
+        # Full report is built — corrected text IS displayed
         assert "Writing Accuracy Feedback Report" in result
-        assert "Word count: 25" in result
-        assert "Hello world" not in result
-        assert "Your Writing with Corrections" not in result
+        assert "Your Writing with Corrections" in result
 
 
     def test_header_is_valid(self):
