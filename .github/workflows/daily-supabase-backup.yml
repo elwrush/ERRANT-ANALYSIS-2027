@@ -1,0 +1,46 @@
+name: Daily Supabase Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set date variable
+        run: echo "BACKUP_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Create backups directory
+        run: mkdir -p backups
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: latest
+
+      - name: Backup roles
+        run: supabase db dump --db-url "$SUPABASE_DB_URL" -f backups/roles.sql --role-only
+
+      - name: Backup schema
+        run: supabase db dump --db-url "$SUPABASE_DB_URL" -f backups/schema.sql
+
+      - name: Backup data
+        run: supabase db dump --db-url "$SUPABASE_DB_URL" -f backups/data.sql --data-only --use-copy
+
+      - name: Clean dump (strip superuser-only lines)
+        run: sed -i '/^ALTER OWNER/d; /^CREATE EXTENSION/d; /^ALTER DEFAULT PRIVILEGES.*OWNER/d' backups/schema.sql
+
+      - name: Commit backup to repo
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "backup: ${{ env.BACKUP_DATE }}"
+          file_pattern: backups/
