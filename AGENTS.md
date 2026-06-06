@@ -28,6 +28,15 @@ This project runs on Windows PowerShell 5.1.
 
 - `.kilo/reference/typst-troubleshooting.md` — Catalogue of Typst bugs encountered and fixes applied (page geometry, context blocks, pad-to-four, mode rules). **Consult before modifying any Typst layout code.**
 
+## Available CLI tools
+
+| Tool | Version | Installed via | Purpose |
+|------|---------|-------|---------|
+| `supabase` | 2.101.0 | scoop + npm | Database backup, migration, Management API |
+| `gh` | latest | scoop | GitHub CLI — PRs, secrets, workflow management |
+
+Use `supabase db dump` for database backups. Use `gh secret set` for updating GitHub Actions secrets. Prefer `supabase` CLI over direct Management API calls where possible.
+
 ## Environment variables
 
 | Variable | Purpose | Set? |
@@ -40,7 +49,7 @@ This project runs on Windows PowerShell 5.1.
 | `SUPABASE_URL` | Supabase project URL | as needed |
 | `SUPABASE_ESL_KEY` | Supabase service role key | as needed |
 | `SUPABASE_ACCESS_TOKEN` | Personal Access Token for Management API (DDL / migrations) | Generate at supabase.com/dashboard/account/tokens |
-| `SUPABASE_DB_URL` | (DEPRECATED) Direct Postgres connection string — use Management API instead | - |
+| `SUPABASE_DB_URL` | Direct Postgres connection string for `pg_dump` backup | ✅ |
 
 ## Models (current)
 
@@ -98,6 +107,10 @@ ruff check src/ tests/
 
 # test
 pytest tests/ -v
+
+# database backup
+supabase db dump --db-url "$SUPABASE_DB_URL" -f backups/schema.sql
+supabase db dump --db-url "$SUPABASE_DB_URL" -f backups/data.sql --data-only --use-copy
 ```
 
 ## Pipeline
@@ -118,6 +131,17 @@ The full ERRANT analysis pipeline consists of these ordered stages. Each stage m
 - **Preflight check:** After ingestion, run `src/preflight_check.py "FOLDER_NAME"` to detect artificial line breaks. If warnings appear, fix before proceeding.
 - **ID sign-off (MANDATORY):** Present the image→ID mapping to the human. Do NOT proceed to ERRANT analysis without explicit confirmation.
 - **Typst verification:** After report generation, verify the PDF compiles without "layout did not converge" warnings.
+
+## Supabase CLI
+
+The `supabase` CLI (v2.101.0) is installed via scoop + npm. Use it for:
+
+| Task | Command |
+|------|---------|
+| Database backup | `supabase db dump --db-url "$env:SUPABASE_DB_URL" -f backups/schema.sql` |
+| Database data backup | `supabase db dump --db-url "$env:SUPABASE_DB_URL" -f backups/data.sql --data-only --use-copy` |
+| Roles backup | `supabase db dump --db-url "$env:SUPABASE_DB_URL" -f backups/roles.sql --role-only` |
+| Management API | Prefer `supabase` CLI over raw Management API calls where possible |
 
 ## Data lineage and class-label convention
 
