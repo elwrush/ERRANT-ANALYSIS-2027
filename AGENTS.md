@@ -50,7 +50,7 @@ This project runs on Windows PowerShell 5.1.
 | Summary | `deepseek-v4-flash` | DeepSeek API | $0.14 | $0.28 |
 | Ingestion | `google/gemini-2.5-flash` | OpenRouter | $0.10 | $0.40 |
 
-Correction runs at temperature 0.6 (non-thinking mode). Summary runs at 0.8 (non-thinking mode). Full pipeline cost: ~$0.00039 per student.
+Correction runs at temperature 0.6 (non-thinking mode). Summary runs at 0.8 (non-thinking mode). Full pipeline cost: ~$0.001 per student ($0.00085 ingest + $0.00006 correction + $0.00006 summary).
 
 ## Context7 documentation lookup
 
@@ -78,7 +78,7 @@ Context7 has Typst indexed (ID: `/typst/typst`). Use Context7 as the first choic
 
 | Item | Path |
 |------|------|
-| Main script | `src/ingest.py`, `src/errant_analysis.py`, `src/rename_json_files.py`, `src/add_word_count.py`, `src/generate_report.py`, `src/interpret_results.py`, `src/desk_statistics.py`, `src/preflight_check.py` |
+| Main script | `src/ingest.py`, `src/errant_analysis.py`, `src/batch_errant_upsert.py`, `src/migrate_writing_records.py`, `src/rename_json_files.py`, `src/add_word_count.py`, `src/generate_report.py`, `src/interpret_results.py`, `src/desk_statistics.py`, `src/preflight_check.py`, `src/research_prep.py`, `src/sampling_strategy.py` |
 | Tests | `tests/test_ingest.py`, `tests/test_errant.py`, `tests/test_rename_json_files.py`, `tests/test_report.py` |
 | Dependencies | `requirements.txt` |
 | Linter | `ruff` (config: `.ruff.toml`) |
@@ -108,7 +108,8 @@ The full ERRANT analysis pipeline consists of these ordered stages. Each stage m
 |---|-------|---------|--------|------------|--------|-----------|
 | 0 | Sampling plan | *(manual)* | `sampling_strategy.py` | — | `local-working/sampling_plan.json` | Plan approved |
 | 1 | Ingestion | `/ingest-images` | `src/ingest.py` | Images in `inputs/{folder}/` | `outputs/{folder}/{student_id}.json` | Preflight check pass + human sign-off on image→ID mapping |
-| 2 | ERRANT analysis | `/errant-analysis` | `src/errant_analysis.py` | Ingestion outputs exist + sign-off confirmed | `local-working/{folder}-{record_id}.json` | All files processed |
+| 2a | ERRANT analysis (interactive) | `/errant-analysis` | `src/errant_analysis.py` | Ingestion outputs exist + sign-off confirmed | `local-working/{folder}-{record_id}.json` | All files processed |
+| 2b | ERRANT batch upsert (Supabase) | *(manual)* | `src/migrate_writing_records.py` → `src/batch_errant_upsert.py` | Existing records in `error_reports` with NULL `error_percent` | Upserted error counts in Supabase | All records have `error_percent` populated |
 | 3 | Rename JSONs | `/rename-json-files` | `src/rename_json_files.py` | ERRANT outputs exist | `local-working/{student_id}.json` | All names validated against Supabase classlist |
 | 4 | Report generation | `/local-report` | `src/generate_report.py` | Renamed JSONs exist | PDF booklet(s) | Typst compiles without convergence warnings |
 | 5 | Backup (optional) | `/git-backup` | *(git workflow)* | Changes to commit | Pushed to remote | — |
@@ -125,7 +126,9 @@ The `class` field in ERRANT output JSONs uses M2/M3 as **enrollment status, not 
 - **M2** = student_id is in the current `classlists` Supabase table (active, still enrolled)
 - **M3** = student_id is NOT in `classlists` (left the program)
 
-All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the Supabase classlist. The label reflects enrollment, not which year they're in. This is consistent across all 689 files (zero anomalies).
+All 36 active ("M2") students are from academic levels M3-4A and M3-5A in the Supabase classlist. The label reflects enrollment, not which year they're in.
+
+The Supabase `error_reports` table contains **986 records** across **141+ unique students**. The `class` column uses actual academic class labels (e.g. M2-4A, M3-3A, M3-4A, M3-5A) for the pre-batch pipeline records, and enrollment-status labels (M2, M3) for records from the batch upsert pipeline.
 
 **CEFR level mapping for chart target lines:** All M3-M6 classes are B2 (target 7% error rate). Lower classes fall to B1 (target 12%).
 

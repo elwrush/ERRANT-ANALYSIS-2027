@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERRANT Grammatical Error Analysis Report — CLP Mathayom Department</title>
+<style>
+  body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.6; color: #222; max-width: 1000px; margin: 0 auto; padding: 2em 1.5em; background: #fff; }
+  h1 { font-size: 1.8em; border-bottom: 3px solid #333333; padding-bottom: .3em; margin-top: 1.5em; }
+  h2 { font-size: 1.4em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.2em; color: #333333; }
+  h3 { font-size: 1.15em; margin-top: 1em; color: #2c3e50; }
+  p, li { font-size: 1em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: .92em; font-family: 'Segoe UI', Arial, sans-serif; }
+  th { background: #333333; color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; }
+  td { padding: 7px 10px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr:nth-child(even) td { background: #f7f9fc; }
+  tr:hover td { background: #eaf2f8; }
+  .err-example { color: #000000; font-weight: bold; font-style: italic; }
+  .corr-example { color: #444444; font-weight: bold; }
+  .notation-note { font-size: 0.92em; font-style: italic; }
+  .ctx u { text-decoration: underline; text-decoration-color: #000000; text-decoration-thickness: 2px; text-underline-offset: 2px; }
+  .corr-example u { color: #444444; }
+  .err-example u { color: #000000; }
+  .ctx { font-size: .88em; color: #555; margin: 2px 0; }
+  code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: .9em; }
+  .summary-box { background: #eaf2f8; border-left: 4px solid #333333; padding: 1em 1.5em; margin: 1em 0; border-radius: 4px; }
+  .note { background: #fef9e7; border-left: 4px solid #f1c40f; padding: .8em 1.2em; margin: 1em 0; font-size: .92em; border-radius: 4px; }
+  .citation { font-size: .88em; }
+  .ref-list { font-size: .92em; padding-left: 0; list-style: none; }
+  .ref-list li { margin-bottom: .5em; padding-left: 2em; text-indent: -2em; }
+  .banner { background: #333333; color: #fff; padding: 1.5em 2em; margin: -2em -1.5em 2em -1.5em; border-radius: 0 0 8px 8px; }
+  .banner h1 { border: none; margin: 0; color: #fff; font-size: 2em; }
+  .banner p { margin: .3em 0 0 0; opacity: .85; }
+  @media print { body { padding: 0; } .banner { margin: 0; border-radius: 0; } }
+  .err-code { font-family: 'Consolas', monospace; font-weight: bold; color: #333333; }
+  .rank { text-align: center; font-weight: bold; color: #666; }
+</style>
+</head>
+<body>
+
+<div class="banner">
+<h1>Grammatical Error Analysis Report</h1>
+<p>CLP Mathayom Department — Academic Year 2025–2026</p>
+</div>
+
+<h1>Introduction</h1>
+
+<p>This year teachers employed by the Mathayom department of CLP have been asked to identify the lexico-grammatical areas which cause our students the most problems. By doing so, we can adapt our teaching to address those problems.</p>
+
+
+<p>I have conducted analysis of <strong>986</strong> paragraphs and essays composed by my students during the 2025 academic year and the current year to date (June 5, 2026) using Cambridge University's ERRANT Analysis framework and have identified three major outcomes:</p>
+
+<ol>
+<li><strong>The three most common errors</strong> across all papers written by students are:
+    <ol type="a">
+        <li><strong>Capitalisation (R:ORTH)</strong> — 7,121 instances (4.32/100 words). This is overwhelmingly the most frequent issue: students write "i" instead of "I", fail to capitalise sentence-initial words, and mix capitalisation within sentences.</li>
+        <li><strong>Noun form errors (R:NOUN)</strong> — 6,798 instances (4.12/100 words). Students make mistakes with singular and plural nouns — for example "many character" instead of "many characters", "my friend" when referring to multiple friends, and "a few second" instead of "a few seconds". This category also captures some punctuation changes around nouns, but the dominant pattern is noun number errors.</li>
+        <li><strong>Spelling (R:SPELL)</strong> — 4,134 instances (2.51/100 words). Examples of frequent misspellings include "possesion" for "possession", "personallity" for "personality", and "knowlegde" for "knowledge". These are phonetic spellings reflecting how the words sound in spoken English.</li>
+</ul>
+</li>
+<li><strong>M2A and M3A students are quantitatively similar</strong> in their error profiles. M2A-level students averaged 28.6% error rate; M3A-level students averaged 28.5%. The difference is negligible. Both cohorts share the same top error types in nearly the same order. Qualitatively, the two groups struggle with the same linguistic areas.</li>
+        <li><strong>International benchmarking</strong> is possible but must be approached cautiously. The mean error rate across all submissions is 28.6% (edits per 100 words). Only 6.8% of submissions have an error rate at or below 12%, and just 1.8% at or below 7%. These thresholds are indicative targets discussed in the grammatical error correction literature (Bryant et al., 2019; Nicholls et al., 2024), but direct CEFR-to-error-rate mapping is complicated by different annotation methodologies. My figures provide a reliable internal baseline for tracking improvement over time.</li>
+</ul>
+
+<div class="summary-box">
+<p><strong>Summary:</strong> Our students' most persistent writing challenges are capitalisation conventions, noun-related errors, and spelling. These cut across both M2A and M3A levels. The results cover five of the 27 possible cohort combinations (M1–M3 × sections 3–5 × streams A/B/C), so they cannot be generalised to other cohorts without further analysis. However, the methodology is sound and the patterns identified are likely representative of Thai secondary students at these levels. Future work should extend this analysis to the cohorts not yet studied — particularly M1 and the B/C streams — and track whether targeted interventions reduce the error rates over time.</p>
+</div>
+
+<h1>What is ERRANT?</h1>
+
+<p>ERRANT (ERRor ANnotation Toolkit) was developed by academic researchers Christopher Bryant, Mariano Felice and Ted Briscoe at the University of Cambridge. It is referenced on the University of Cambridge Language Sciences portal at <a href="https://www.languagesciences.cam.ac.uk/resources">languagesciences.cam.ac.uk/resources</a>. The toolkit is available as an open-source Python library (pip install errant) and can be used with any spaCy language model. ERRANT analyses students' uncorrected sentences, compares them against corrected versions, and generates error codes identifying the students' mistakes.</p>
+
+<p>To reproduce the method used in this report, the steps are: (1) install Python 3.8+ and run <code>pip install errant spacy</code>; (2) download a spaCy English model with <code>python -m spacy download en_core_web_sm</code>; (3) prepare paired text files — one with the student's original writing, one with a manually or automatically corrected version, aligned sentence by sentence; (4) run ERRANT's M2 comparison, which generates a token-level diff between each sentence pair and classifies every edit into an error category. The output is an M2 format file that can be parsed to produce error-type counts. Here is an example from the ERRANT documentation.</p>
+
+<div class="note">
+<p><strong>Original:</strong> <span class="err-example">This are gramamtical sentence .</span></p>
+<p><strong>Corrected:</strong> <span class="corr-example">This is a grammatical sentence .</span></p>
+</div>
+
+<p><strong>ERRANT output (M2 format):</strong></p>
+<pre>S This are gramamtical sentence .
+A 1 2|||R:VERB:SVA|||is|||REQUIRED|||-NONE-|||0
+A 2 2|||M:DET|||a|||REQUIRED|||-NONE-|||0
+A 2 3|||R:SPELL|||grammatical|||REQUIRED|||-NONE-|||0
+A -1 -1|||noop|||-NONE-|||REQUIRED|||-NONE-|||1</pre>
+
+<div class="note">
+<p><strong>In plain English:</strong> The ungrammatical sentence <em>"This are gramamtical sentence ."</em> was compared with the corrected version <em>"This is a grammatical sentence ."</em>, from which the following was determined:</p>
+<ul>
+<li><strong>Line A 1 2|||R:VERB:SVA:</strong> The verb "are" (token 2) was replaced with "is" — a subject-verb agreement error (R:VERB:SVA). The subject "This" requires singular "is", not plural "are".</li>
+<li><strong>Line A 2 2|||M:DET:</strong> A missing determiner (M:DET) was inserted before "grammatical". The corrected version adds "a".</li>
+<li><strong>Line A 2 3|||R:SPELL:</strong> The word "gramamtical" (tokens 2–3) was replaced with "grammatical" — a spelling error (R:SPELL).</li>
+<li><strong>Line A -1 -1|||noop:</strong> A null operation marking the end of edits.</li>
+</ul>
+</div>
+
+<h1>Results</h1>
+
+<h2>1. Overall Results</h2>
+
+<p>The table below shows the ranked frequency of the top 5 error results from my students' writing. Full results for all error types are available in the appendix.</p>
+
+<p class="notation-note">A note on ERRANT notation: Each error code uses a prefix followed by a colon and an error category. The prefix indicates the type of edit: <strong>R</strong> (Replacement) means the student's word or punctuation was replaced with something different; <strong>M</strong> (Missing) means something was omitted and needed to be inserted; <strong>U</strong> (Unnecessary) means something extra was present and should be removed; <strong>OTHER</strong> means the edit could not be classified into a standard category. The part after the colon indicates the linguistic area affected: for example, <strong>VERB:TENSE</strong> means a verb tense error, <strong>DET</strong> means a determiner or article error, <strong>PREP</strong> means a preposition error, <strong>SPELL</strong> means a spelling error, and <strong>ORTH</strong> means a capitalisation or orthographic error.</p>
+
+<table>
+<thead>
+<tr><th>Rank</th><th>Code</th><th>Meaning</th><th>Count</th><th>/100w</th><th>Example <em>(only the relevant category correction is underlined; a single sentence can have multiple error categories)</em></th></tr>
+</thead>
+<tbody>
+<tr>
+<td class="rank">1</td>
+<td><span class="err-code">r_orth</span></td>
+<td>Capitalisation (e.g. 'i' instead of 'I')</td>
+<td style="text-align:right">7,121</td>
+<td style="text-align:right">4.32</td>
+<td><span class="err-example"><u>ipad</u></span> → <span class="corr-example"><u>iPad</u></span> <div class="ctx">My most prized possession is my <u>ipad</u> because my parents bought it for me when I got a better grade than the last term.</div> <div class="ctx">→ My most prized possession is my <u>iPad</u> because my parents bought it for me when I got a better grade than the last term.</div></td>
+</tr>
+<tr>
+<td class="rank">2</td>
+<td><span class="err-code">r_noun</span></td>
+<td>Noun form error</td>
+<td style="text-align:right">6,798</td>
+<td style="text-align:right">4.12</td>
+<td><span class="err-example"><u>people</u></span> → <span class="corr-example"><u>person's</u></span> <div class="ctx">because I can draw a full <u>people</u> face most likely and I can draw any animal like it was really realistis but the most realists is tiger and a cat</div> <div class="ctx">→ Because I can draw a full <u>person's</u> face most likely, and I can draw any animal as if it were really realistic, but the most realistic are tigers and cats.</div></td>
+</tr>
+<tr>
+<td class="rank">3</td>
+<td><span class="err-code">r_spell</span></td>
+<td>Spelling error</td>
+<td style="text-align:right">4,134</td>
+<td style="text-align:right">2.51</td>
+<td><span class="err-example"><u>possesion</u></span> → <span class="corr-example"><u>possession</u></span> <div class="ctx">The most prized <u>possesion</u> for me is my guitar.</div> <div class="ctx">→ The most prized <u>possession</u> for me is my guitar.</div></td>
+</tr>
+<tr>
+<td class="rank">4</td>
+<td><span class="err-code">r_verb_tense</span></td>
+<td>Wrong verb tense</td>
+<td style="text-align:right">2,349</td>
+<td style="text-align:right">1.42</td>
+<td><span class="err-example"><u>review</u></span> → <span class="corr-example"><u>reviewed</u></span> <div class="ctx">I <u>review</u> all the lesson every single day to success the chalenge.</div> <div class="ctx">→ I <u>reviewed</u> all the lessons every single day to succeed in the challenge.</div></td>
+</tr>
+<tr>
+<td class="rank">5</td>
+<td><span class="err-code">m_det</span></td>
+<td>Missing article (a, an, the)</td>
+<td style="text-align:right">2,216</td>
+<td style="text-align:right">1.34</td>
+<td>Missing: <span class="corr-example"><u>an</u></span> <div class="ctx">The second is my creative idea, example is the way i tidy my room or my desk properly with a perfect directiono</div> <div class="ctx">→ The second is my creative idea; <u>an</u> example is the way I tidy my room or my desk properly with a perfect direction.</div></td>
+</tr>
+
+</tbody>
+</table>
+
+<h2>2. M2A vs M3A Comparison</h2>
+
+<p>The table below shows the error rate per 100 words between the two cohorts as well as their top 10 ranked error types, defined, with examples.</p>
+
+<h3>Error Rate Overview</h3>
+
+<table>
+<thead>
+<tr><th>Cohort</th><th>Records</th><th>Total Words</th><th>Total Errors</th><th>Mean Error Rate</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>M2A</strong></td><td>320</td><td>40,387</td><td>10,920</td><td>28.6%</td></tr>
+<tr><td><strong>M3A</strong></td><td>666</td><td>124,564</td><td>34,154</td><td>28.5%</td></tr>
+</tbody>
+</table>
+
+<p>The M2A and M3A cohorts show nearly identical mean error rates (28.6% vs 28.5%). This is an important finding: despite being at different levels of the programme, both groups struggle with the same types of errors at similar frequencies. The difference in writing proficiency between M2A and M3A probably lies in areas that ERRANT does not measure — such as content development, coherence, or task achievement — rather than in grammatical accuracy at the token level.</p>
+
+<h3>Top 10 Error Types by Cohort</h3>
+
+<table>
+<thead>
+<tr><th>Rank</th><th>M2A — Error Type</th><th>Meaning</th><th>M2A /100w</th><th>M2A Count</th><th></th><th>M3A — Error Type</th><th>Meaning</th><th>M3A /100w</th><th>M3A Count</th></tr>
+</thead>
+<tbody>
+<tr>
+<td class="rank">1</td>
+<td><span class="err-code">r_orth</span></td>
+<td style="font-size:.85em">Capitalisation (e.g. 'i' instead of 'I')</td>
+<td style="text-align:right">4.53</td>
+<td style="text-align:right">1829</td>
+<td style="width:15px"></td>
+<td><span class="err-code">r_orth</span></td>
+<td style="font-size:.85em">Capitalisation (e.g. 'i' instead of 'I')</td>
+<td style="text-align:right">4.25</td>
+<td style="text-align:right">5292</td>
+</tr>
+<tr>
+<td class="rank">2</td>
+<td><span class="err-code">r_noun</span></td>
+<td style="font-size:.85em">Noun form error</td>
+<td style="text-align:right">3.88</td>
+<td style="text-align:right">1566</td>
+<td style="width:15px"></td>
+<td><span class="err-code">r_noun</span></td>
+<td style="font-size:.85em">Noun form error</td>
+<td style="text-align:right">4.2</td>
+<td style="text-align:right">5232</td>
+</tr>
+<tr>
+<td class="rank">3</td>
+<td><span class="err-code">r_spell</span></td>
+<td style="font-size:.85em">Spelling error</td>
+<td style="text-align:right">2.54</td>
+<td style="text-align:right">1024</td>
+<td style="width:15px"></td>
+<td><span class="err-code">r_spell</span></td>
+<td style="font-size:.85em">Spelling error</td>
+<td style="text-align:right">2.5</td>
+<td style="text-align:right">3110</td>
+</tr>
+<tr>
+<td class="rank">4</td>
+<td><span class="err-code">r_verb_tense</span></td>
+<td style="font-size:.85em">Wrong verb tense</td>
+<td style="text-align:right">1.57</td>
+<td style="text-align:right">635</td>
+<td style="width:15px"></td>
+<td><span class="err-code">r_verb_tense</span></td>
+<td style="font-size:.85em">Wrong verb tense</td>
+<td style="text-align:right">1.38</td>
+<td style="text-align:right">1714</td>
+</tr>
+<tr>
+<td class="rank">5</td>
+<td><span class="err-code">m_det</span></td>
+<td style="font-size:.85em">Missing article (a, an, the)</td>
+<td style="text-align:right">1.27</td>
+<td style="text-align:right">511</td>
+<td style="width:15px"></td>
+<td><span class="err-code">m_det</span></td>
+<td style="font-size:.85em">Missing article (a, an, the)</td>
+<td style="text-align:right">1.37</td>
+<td style="text-align:right">1705</td>
+</tr>
+<tr>
+<td class="rank">6</td>
+<td><span class="err-code">m_verb</span></td>
+<td style="font-size:.85em">Missing verb</td>
+<td style="text-align:right">1.17</td>
+<td style="text-align:right">474</td>
+<td style="width:15px"></td>
+<td><span class="err-code">m_verb</span></td>
+<td style="font-size:.85em">Missing verb</td>
+<td style="text-align:right">1.07</td>
+<td style="text-align:right">1329</td>
+</tr>
+<tr>
+<td class="rank">7</td>
+<td><span class="err-code">other</span></td>
+<td style="font-size:.85em">Other (uncategorised)</td>
+<td style="text-align:right">1.02</td>
+<td style="text-align:right">413</td>
+<td style="width:15px"></td>
+<td><span class="err-code">r_noun_num</span></td>
+<td style="font-size:.85em">Noun number (singular/plural)</td>
+<td style="text-align:right">0.99</td>
+<td style="text-align:right">1236</td>
+</tr>
+<tr>
+<td class="rank">8</td>
+<td><span class="err-code">r_verb</span></td>
+<td style="font-size:.85em">Verb error (general)</td>
+<td style="text-align:right">0.98</td>
+<td style="text-align:right">396</td>
+<td style="width:15px"></td>
+<td><span class="err-code">r_verb_sva</span></td>
+<td style="font-size:.85em">Subject-verb agreement</td>
+<td style="text-align:right">0.96</td>
+<td style="text-align:right">1197</td>
+</tr>
+<tr>
+<td class="rank">9</td>
+<td><span class="err-code">r_noun_num</span></td>
+<td style="font-size:.85em">Noun number (singular/plural)</td>
+<td style="text-align:right">0.93</td>
+<td style="text-align:right">376</td>
+<td style="width:15px"></td>
+<td><span class="err-code">r_verb</span></td>
+<td style="font-size:.85em">Verb error (general)</td>
+<td style="text-align:right">0.9</td>
+<td style="text-align:right">1124</td>
+</tr>
+<tr>
+<td class="rank">10</td>
+<td><span class="err-code">r_det</span></td>
+<td style="font-size:.85em">Wrong determiner</td>
+<td style="text-align:right">0.74</td>
+<td style="text-align:right">300</td>
+<td style="width:15px"></td>
+<td><span class="err-code">m_prep</span></td>
+<td style="font-size:.85em">Missing preposition</td>
+<td style="text-align:right">0.89</td>
+<td style="text-align:right">1113</td>
+</tr>
+
+</tbody>
+</table>
+
+<p>The rankings are nearly identical between the two cohorts. The top five errors are the same: capitalisation (R:ORTH), noun errors (R:NOUN), spelling (R:SPELL), verb tense (R:VERB:TENSE), and missing articles (M:DET). The only notable difference is that M2 has "Other" at rank 7 while M3 has it at rank 11, and M3 has subject-verb agreement (R:VERB:SVA) at rank 8 while M2 has it at rank 12. These differences are small and unlikely to be educationally meaningful.</p>
+
+<h3>Error Rate Distribution</h3>
+
+<p>The distribution of submission error rates: overall raw counts (top), M2A vs M3A compared as percentages (bottom).</p>
+
+<svg viewBox="0 0 500 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:520px;display:block;margin:1em auto;font-family:system-ui,sans-serif;">
+  <line x1="50" y1="20" x2="50" y2="190" stroke="#333" stroke-width="1.5"/>
+  <line x1="50" y1="190" x2="480" y2="190" stroke="#333" stroke-width="1.5"/>
+  <text x="265" y="12" text-anchor="middle" font-size="12" fill="#333" font-weight="bold">All submissions: raw numbers</text>
+  <text x="45" y="194" text-anchor="end" font-size="11" fill="#666">0</text>
+  <line x1="50" y1="190" x2="480" y2="190" stroke="#eee" stroke-width="1"/>
+  <text x="45" y="151.5" text-anchor="end" font-size="11" fill="#666">87</text>
+  <line x1="50" y1="147.5" x2="480" y2="147.5" stroke="#eee" stroke-width="1"/>
+  <text x="45" y="109.0" text-anchor="end" font-size="11" fill="#666">175</text>
+  <line x1="50" y1="105.0" x2="480" y2="105.0" stroke="#eee" stroke-width="1"/>
+  <text x="45" y="66.5" text-anchor="end" font-size="11" fill="#666">262</text>
+  <line x1="50" y1="62.5" x2="480" y2="62.5" stroke="#eee" stroke-width="1"/>
+  <text x="45" y="24" text-anchor="end" font-size="11" fill="#666">350</text>
+  <line x1="50" y1="20" x2="480" y2="20" stroke="#eee" stroke-width="1"/>
+  <text x="265" y="230" text-anchor="middle" font-size="12" fill="#333">Error rate per 100 words: Ranges</text>
+  <text x="15" y="105" text-anchor="middle" font-size="12" fill="#333" transform="rotate(-90,15,105)">Submissions</text>
+  <rect x="65" y="173.97142857142856" width="55" height="16.02857142857143" rx="3" fill="#333333" opacity="0.9"/>
+  <text x="92" y="167.97142857142856" text-anchor="middle" font-size="11" fill="#333">33</text>
+  <text x="92" y="208" text-anchor="middle" font-size="10" fill="#666">0-10%</text>
+  <rect x="135" y="97.22857142857143" width="55" height="92.77142857142857" rx="3" fill="#333333" opacity="0.9"/>
+  <text x="162" y="91.22857142857143" text-anchor="middle" font-size="11" fill="#333">191</text>
+  <text x="162" y="208" text-anchor="middle" font-size="10" fill="#666">10-20%</text>
+  <rect x="205" y="36.02857142857144" width="55" height="153.97142857142856" rx="3" fill="#333333" opacity="0.9"/>
+  <text x="232" y="30.02857142857144" text-anchor="middle" font-size="11" fill="#333">317</text>
+  <text x="232" y="208" text-anchor="middle" font-size="10" fill="#666">20-30%</text>
+  <rect x="275" y="53.514285714285734" width="55" height="136.48571428571427" rx="3" fill="#333333" opacity="0.9"/>
+  <text x="302" y="47.514285714285734" text-anchor="middle" font-size="11" fill="#333">281</text>
+  <text x="302" y="208" text-anchor="middle" font-size="10" fill="#666">30-40%</text>
+  <rect x="345" y="137.54285714285714" width="55" height="52.457142857142856" rx="3" fill="#333333" opacity="0.9"/>
+  <text x="372" y="131.54285714285714" text-anchor="middle" font-size="11" fill="#333">108</text>
+  <text x="372" y="208" text-anchor="middle" font-size="10" fill="#666">40-50%</text>
+  <rect x="415" y="167.65714285714284" width="55" height="22.34285714285714" rx="3" fill="#333333" opacity="0.9"/>
+  <text x="442" y="161.65714285714284" text-anchor="middle" font-size="11" fill="#333">46</text>
+  <text x="442" y="208" text-anchor="middle" font-size="10" fill="#666">50-50+%</text>
+</svg>
+
+<svg viewBox="0 0 479 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:560px;display:block;margin:1em auto;font-family:system-ui,sans-serif;">
+  <line x1="50" y1="20" x2="50" y2="190" stroke="#333" stroke-width="1.5"/>
+  <line x1="50" y1="190" x2="469" y2="190" stroke="#333" stroke-width="1.5"/>
+  <text x="249.5" y="12" text-anchor="middle" font-size="12" fill="#333" font-weight="bold">M2A vs M3A: percentages of cohort submissions</text>
+  <text x="45" y="194" text-anchor="end" font-size="11" fill="#666">0%</text>
+  <line x1="50" y1="190" x2="469" y2="190" stroke="#eee" stroke-width="1"/>
+  <text x="45" y="151.5" text-anchor="end" font-size="11" fill="#666">12%</text>
+  <line x1="50" y1="147.5" x2="469" y2="147.5" stroke="#eee" stroke-width="1"/>
+  <text x="45" y="109.0" text-anchor="end" font-size="11" fill="#666">25%</text>
+  <line x1="50" y1="105.0" x2="469" y2="105.0" stroke="#eee" stroke-width="1"/>
+  <text x="45" y="66.5" text-anchor="end" font-size="11" fill="#666">37%</text>
+  <line x1="50" y1="62.5" x2="469" y2="62.5" stroke="#eee" stroke-width="1"/>
+  <text x="45" y="24" text-anchor="end" font-size="11" fill="#666">50%</text>
+  <line x1="50" y1="20" x2="469" y2="20" stroke="#eee" stroke-width="1"/>
+  <text x="265" y="245" text-anchor="middle" font-size="12" fill="#333">Error rate per 100 words: Ranges</text>
+  <text x="15" y="105" text-anchor="middle" font-size="12" fill="#333" transform="rotate(-90,15,105)">% of cohort submissions</text>
+  <rect x="65" y="180.14" width="22" height="9.86" rx="2" fill="#222222" opacity="0.85"/>
+  <text x="76.0" y="176.14" text-anchor="middle" font-size="11" fill="#333">2.9</text>
+  <rect x="91" y="177.76" width="22" height="12.240000000000002" rx="2" fill="#999999" opacity="0.85"/>
+  <text x="102.0" y="173.76" text-anchor="middle" font-size="11" fill="#333">3.6</text>
+  <text x="89.0" y="208" text-anchor="middle" font-size="10" fill="#666">0-10%</text>
+  <rect x="129" y="124.04" width="22" height="65.96" rx="2" fill="#222222" opacity="0.85"/>
+  <text x="140.0" y="120.04" text-anchor="middle" font-size="11" fill="#333">19.4</text>
+  <rect x="155" y="123.36" width="22" height="66.64" rx="2" fill="#999999" opacity="0.85"/>
+  <text x="166.0" y="119.36" text-anchor="middle" font-size="11" fill="#333">19.6</text>
+  <text x="153.0" y="208" text-anchor="middle" font-size="10" fill="#666">10-20%</text>
+  <rect x="193" y="69.64" width="22" height="120.36" rx="2" fill="#222222" opacity="0.85"/>
+  <text x="204.0" y="65.64" text-anchor="middle" font-size="11" fill="#333">35.4</text>
+  <rect x="219" y="84.26" width="22" height="105.74" rx="2" fill="#999999" opacity="0.85"/>
+  <text x="230.0" y="80.26" text-anchor="middle" font-size="11" fill="#333">31.1</text>
+  <text x="217.0" y="208" text-anchor="middle" font-size="10" fill="#666">20-30%</text>
+  <rect x="257" y="102.28" width="22" height="87.72" rx="2" fill="#222222" opacity="0.85"/>
+  <text x="268.0" y="98.28" text-anchor="middle" font-size="11" fill="#333">25.8</text>
+  <rect x="283" y="87.32000000000001" width="22" height="102.67999999999999" rx="2" fill="#999999" opacity="0.85"/>
+  <text x="294.0" y="83.32000000000001" text-anchor="middle" font-size="11" fill="#333">30.2</text>
+  <text x="281.0" y="208" text-anchor="middle" font-size="10" fill="#666">30-40%</text>
+  <rect x="321" y="155.32" width="22" height="34.68" rx="2" fill="#222222" opacity="0.85"/>
+  <text x="332.0" y="151.32" text-anchor="middle" font-size="11" fill="#333">10.2</text>
+  <rect x="347" y="150.9" width="22" height="39.1" rx="2" fill="#999999" opacity="0.85"/>
+  <text x="358.0" y="146.9" text-anchor="middle" font-size="11" fill="#333">11.5</text>
+  <text x="345.0" y="208" text-anchor="middle" font-size="10" fill="#666">40-50%</text>
+  <rect x="385" y="168.24" width="22" height="21.76" rx="2" fill="#222222" opacity="0.85"/>
+  <text x="396.0" y="164.24" text-anchor="middle" font-size="11" fill="#333">6.4</text>
+  <rect x="411" y="176.74" width="22" height="13.26" rx="2" fill="#999999" opacity="0.85"/>
+  <text x="422.0" y="172.74" text-anchor="middle" font-size="11" fill="#333">3.9</text>
+  <text x="409.0" y="208" text-anchor="middle" font-size="10" fill="#666">50-50+%</text>
+  <rect x="364" y="28" width="12" height="12" fill="#222222" opacity="0.85" rx="2"/>
+  <text x="381" y="38" font-size="11" fill="#333">M2A</text>
+  <rect x="424" y="28" width="12" height="12" fill="#999999" opacity="0.85" rx="2"/>
+  <text x="441" y="38" font-size="11" fill="#333">M3A</text>
+</svg>
+
+<p>The overall chart shows a pronounced peak in the middle ranges: most submissions cluster between 20% and 40% error rates, with comparatively few at the low end and a long tail at the high end. The comparison chart tells us that M2A and M3A follow almost the same distribution pattern when adjusted for cohort size. This reinforces what the error-type rankings already showed — the two cohorts are not qualitatively different in their writing difficulties. The main implication is that grammatical accuracy support is needed across both levels, not just the lower one.</p>
+
+<p>These students are in Year 8 (M2, approximately 13–14 years old) and Year 9 (M3, approximately 14–15 years old). Research on the critical period for second language acquisition suggests that the ability to achieve native-like grammatical competence begins to decline around age 17–18 (Hartshorne, Tenenbaum & Pinker, 2018, pp. 268–269). This means our students are still within a window where targeted intervention is likely to be effective — but it is a narrowing one. The concept of linguistic fossilisation, first described by Selinker (1972, p. 215), refers to the point at which certain errors become permanently embedded in a learner's interlanguage. Fossilisation can set in when errors are not explicitly identified and addressed (Wei, 2008, p. 130). The ERRANT analysis in this report provides precisely the kind of systematic error identification that can help prevent fossilisation: by showing both teachers and students exactly which error types recur most frequently, it creates an evidence base for focused instruction. Carnegie Mellon University's guidance on fossilised grammar notes that these errors "do not need to be permanent" — awareness-raising combined with targeted practice can reverse them even in advanced learners. For our context, the implication is clear: the Year 8–9 band is the right time to implement the interventions suggested in this report, while there is still ample room for improvement before the critical window closes.</p>
+
+<h2>3. Benchmarking</h2>
+
+<p>The above analysis shows students at the M2A and M3A levels make an average of 28.6% errors per 100 words. Placing this in an international context is not straightforward, because published CEFR-aligned learner corpora use different annotation methodologies from my ERRANT-based pipeline.</p>
+
+<p>The Write & Improve Corpus 2024 (Nicholls et al., 2024) is the most relevant reference point: it contains error-annotated, CEFR-labelled essays from learners of 22 different L1s, submitted to Cambridge English's Write & Improve platform. However, that corpus uses human error annotation, which produces systematically different error counts from automated ERRANT annotation. The BEA 2019 Shared Task (Bryant et al., 2019, p. 2) — the standard benchmark in grammatical error correction — reports that its datasets (FCE, W&I, LOCNESS) contain a total of 43,169 sentences and 801,361 tokens across proficiency levels, but again the annotation methodology (human expert annotators) differs from my fully automated pipeline.</p>
+
+<p>What I can say with confidence is this:</p>
+
+<ul>
+<li>Our students' mean error rate across all <strong>986</strong> submissions is <strong>28.6%</strong> (edits per 100 words using ERRANT annotation).</li>
+<li>Only <strong>6.8%</strong> of submissions have an error rate at or below 12%, and only <strong>1.8%</strong> at or below 7%.</li>
+<li>These thresholds are indicative targets commonly discussed in the GEC literature, though direct CEFR-to-error-rate mapping remains an active research area.</li>
+</ul>
+
+<table>
+<thead>
+<tr><th>Threshold</th><th>Submissions at or Below</th><th>Percentage</th></tr>
+</thead>
+<tbody>
+<tr><td>&le;12% error rate (approx. B1 target)</td><td style="text-align:right">67 / 986</td><td style="text-align:right">6.8%</td></tr>
+<tr><td>&le;7% error rate (approx. B2 target)</td><td style="text-align:right">18 / 986</td><td style="text-align:right">1.8%</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<p><strong>Important caveat:</strong> The error rates reported here come from an automated ERRANT pipeline using single-pass LLM correction. Different counting methodologies (human annotation, multi-pass voting, different annotation tools) produce different absolute numbers. The FCE dataset, annotated by human experts, reports approximately 26 errors per 100 words (Bryant et al., 2019, p. 3), which is close to our students' mean of 28.6%. This suggests our students' error densities are in a similar range to those of learners in published GEC benchmark datasets — though the two figures are not directly comparable due to methodological differences.</p>
+</div>
+
+<p>Thailand's national education policy increasingly emphasises CEFR-aligned English proficiency. The EF English Proficiency Index (EF Education First, 2024, p. 34) ranks Thailand in the "low proficiency" band (94th out of 113 countries). My own data contributes a specific, measurable baseline: across 986 submissions from 141 students, the mean ERRANT error rate is 28.6%. Whether this is "high" or "low" relative to international standards depends on the methodological frame used. What matters most is that I now have a reproducible measurement tool to track whether this figure improves over time.</p>
+
+<h1>Limitations</h1>
+
+<p>ERRANT analysis has some fundamental challenges which need to be noted. The ways in which these challenges were addressed are discussed below.</p>
+
+<ol>
+<li><strong>LLM correction is stochastic and occasionally over-corrects.</strong> Composing corrected sentences for thousands of ungrammatical student texts is extremely challenging. This project used DeepSeek V4 Flash via the DeepSeek API to generate corrections. However, large language models are stochastic (involves random variables; the same input can produce different output on each call). On rare occasions (about 1 in 500 texts), the model ignores the minimal-editing instruction and produces a fluency-level rewrite rather than a minimal correction. This inflates the error count for that text. I experimented with multi-pass majority voting (Goto et al., 2026) to mitigate this, but in practice the voting results were no better — and sometimes worse — than single-pass correction with DeepSeek V4 Flash. The single-pass approach was therefore retained as the most practical method for this dataset.</li>
+
+<li><strong>ERRANT's "OTHER" and "R:NOUN" categories are noisy.</strong> Categorising errors is a difficult task. ERRANT tends to produce a large set of "R:NOUN" results that partially reflect punctuation and sentence-boundary changes rather than genuine noun errors. Similarly, "OTHER" (uncategorised edits) accounted for about 0.88 per 100 words across the dataset — not a dominant category, but a persistent source of noise. For pedagogical purposes, the clearest actionable categories are capitalisation (R:ORTH), spelling (R:SPELL), verb tense (R:VERB:TENSE), missing articles (M:DET), and subject-verb agreement (R:VERB:SVA).</li>
+
+<li><strong>Limited scope of data.</strong> The analysis was confined to students in M2-4A, M2-5A, M3-3A, M3-4A, and M3-5A — five of the 27 possible cohort combinations (M1–M3 &times; sections 3–5 &times; streams A/B/C). These results cannot be generalised to other cohorts. The school has nine cohorts per grade level; the present study covers five of these 27. Analysis of the remaining cohorts is needed to determine whether similar error patterns hold across the full programme.</li>
+
+<li><strong>Single academic year.</strong> This analysis draws on writing from the 2025 academic year and the current year to date. Without multiple years of data, it is not possible to assess whether error rates are improving year-on-year or whether the patterns identified here are stable across cohorts.</li>
+
+<li><strong>No human-validated gold standard.</strong> The ERRANT analysis is fully automated. No subset of corrections was independently verified by a human rater. This means I cannot compute precision or recall for the automated corrections. However, the primary purpose of this analysis is to identify broad patterns for curriculum planning, not to produce diagnostic scores for individual students.</li>
+
+<li><strong>Single teacher.</strong> All the student writing analysed here was produced in classes taught by one teacher. Different teachers may elicit different error patterns through their instructional approach, assessment criteria, or topic choices.</li>
+</ul>
+
+<p>Despite these limitations, the error rankings presented here are robust: they represent consistent patterns across 986 student submissions, and the top error types are stable regardless of the methodological caveats. The findings provide a useful starting point for curriculum discussion.</p>
+
+<h1>Methodology</h1>
+
+<p>The analysis pipeline followed these steps:</p>
+
+<ol>
+<li><strong>Data collection:</strong> Students wrote paragraphs and essays by hand in class on assigned topics. These were scanned and saved as JPEG images.</li>
+
+<li><strong>OCR transcription:</strong> Handwritten pages were transcribed using Google Gemini 2.5 Flash via the OpenRouter API. The transcription prompt instructed the model to retain all errors verbatim — no silent corrections.</li>
+
+<li><strong>Grammatical correction:</strong> Each student text was corrected by DeepSeek V4 Flash (deepseek-v4-flash) at temperature 0.6 using a minimal-editing prompt. The prompt instructed the model to act as a proofreader, not an editor: fix only what is grammatically wrong, preserve the student's voice and sentence structure, and avoid fluency rewriting.
+
+<p style="margin:0.5em 0 0 1em;font-size:0.92em;color:#444;">This model was chosen over alternatives such as GPT-4o-mini and GPT-4.1-nano, which had been used in earlier development phases, because DeepSeek V4 Flash produced noticeably better results on this task during testing. The published GEC literature frequently uses GPT-family models with multi-pass voting to filter spurious edits (Goto et al., 2026). However, when I tested multi-pass voting with GPT-4o-mini (5 passes at gradient temperatures with 3/5 edit-level majority), the results were actually worse than single-pass correction with DeepSeek V4 Flash — the voting introduced inconsistencies and occasionally dropped valid corrections. DeepSeek V4 Flash's single-pass output was more conservative and more consistent: it tended to make fewer unnecessary changes and preserved the student's voice better than either GPT model in single-pass mode. Given the project's scale (986 submissions) and cost constraints, single-pass correction with DeepSeek V4 Flash proved the most practical and effective approach for this dataset.</p></li>
+
+<li><strong>ERRANT annotation:</strong> The original and corrected texts were compared using the ERRANT v3 rule-based classifier (Bryant et al., 2017), the current standard framework in the GEC field (Bryant et al., 2023). ERRANT extracted token-level edits, classified each into one of 55 error types (Replacement, Missing, Unnecessary), and counted occurrences per type.</li>
+
+<li><strong>Summary generation:</strong> DeepSeek V4 Flash generated a personalised feedback summary for each student, identifying 2–3 specific error patterns and providing encouragement.</li>
+
+<li><strong>Data storage:</strong> Error counts, error rates, and summaries were stored in the Supabase <code>error_reports</code> table, keyed by <code>(student_id, date)</code>.</li>
+
+<li><strong>Analysis:</strong> Error-type frequencies were aggregated across all submissions and normalised per 100 words. Cohorts were compared by splitting on class level (M2A vs M3A). Per-student mean error rates were compared against CEFR benchmarks.</li>
+</ul>
+
+<p>Total cost for the full pipeline: approximately $0.00039 per student submission.</p>
+
+
+<p>The findings of this study open several useful avenues for the centre, particularly as the centre transitions toward Cambridge for Schools examination preparation where CEFR results are becoming increasingly important.</p>
+
+<ol>
+<li><strong>Extend the analysis to the remaining cohorts.</strong> The present study covers only five of 27 cohorts (M1–M3 &times; sections 3–5 &times; streams A/B/C). Extending the analysis to include the cohorts not yet studied would give us a complete picture of error patterns across the full programme. This is important because earlier intervention (at lower levels) may be more effective than remediation at M2/M3.</li>
+
+<li><strong>Track longitudinally.</strong> With multiple academic years of data, we could measure whether specific error rates decrease over time and whether particular cohorts improve faster than others. This would allow evidence-based evaluation of curriculum changes.</li>
+
+<li><strong>Map errors to Cambridge exam criteria.</strong> The Cambridge for Schools examinations (A2 Key, B1 Preliminary, B2 First) assess writing on content, communicative achievement, organisation, and language. Mapping our ERRANT error types to Cambridge assessment criteria would help teachers focus their instruction on the areas that matter most for exam success.</li>
+
+<li><strong>Design and test targeted interventions.</strong> The top three error types — capitalisation, spelling, and verb tense — are teachable and addressable. A pilot programme with explicit instruction on these areas, followed by re-testing using the same ERRANT pipeline, would provide direct evidence of what works.</li>
+
+<li><strong>Cross-linguistic comparison.</strong> Research into Thai L1 English learner errors is relatively limited compared to Chinese, Japanese, or Arabic L1 GEC research. A dedicated study comparing my students' error profiles with those of other L1 groups could contribute to the broader literature and inform more targeted pedagogy.</li>
+</ul>
+
+<p>Thailand has made English proficiency a national priority, yet the most recent EF English Proficiency Index ranks Thailand in the "low proficiency" band. My own data provides a specific, measurable baseline: across 986 submissions from 141 students, the mean ERRANT error rate is 28.6%. Whether this is "high" or "low" relative to international standards depends on the methodological frame used, as discussed in the benchmarking section above. What matters most is that the ERRANT analysis pipeline provides a cost-effective, reproducible tool for tracking progress over time and evaluating the impact of instructional interventions.</p>
+
+<h1>Full Results</h1>
+
+<p>The three tables below show the complete error rankings for all students (overall), M3A-level students, and M2A-level students, in the same format as the main results tables.</p>
+
+<h2>Overall — All Students</h2>
+
+<table>
+<thead>
+<tr><th>Rank</th><th>Error Code</th><th>Meaning</th><th>Count</th><th>/100w</th></tr>
+</thead>
+<tbody>
+<tr><td class="rank">1</td><td><span class="err-code">r_orth</span></td><td>Capitalisation (e.g. 'i' instead of 'I')</td><td style="text-align:right">7,121</td><td style="text-align:right">4.32</td></tr>
+<tr><td class="rank">2</td><td><span class="err-code">r_noun</span></td><td>Noun form error</td><td style="text-align:right">6,798</td><td style="text-align:right">4.12</td></tr>
+<tr><td class="rank">3</td><td><span class="err-code">r_spell</span></td><td>Spelling error</td><td style="text-align:right">4,134</td><td style="text-align:right">2.51</td></tr>
+<tr><td class="rank">4</td><td><span class="err-code">r_verb_tense</span></td><td>Wrong verb tense</td><td style="text-align:right">2,349</td><td style="text-align:right">1.42</td></tr>
+<tr><td class="rank">5</td><td><span class="err-code">m_det</span></td><td>Missing article (a, an, the)</td><td style="text-align:right">2,216</td><td style="text-align:right">1.34</td></tr>
+<tr><td class="rank">6</td><td><span class="err-code">m_verb</span></td><td>Missing verb</td><td style="text-align:right">1,803</td><td style="text-align:right">1.09</td></tr>
+<tr><td class="rank">7</td><td><span class="err-code">r_noun_num</span></td><td>Noun number (singular/plural)</td><td style="text-align:right">1,612</td><td style="text-align:right">0.98</td></tr>
+<tr><td class="rank">8</td><td><span class="err-code">r_verb</span></td><td>Verb error (general)</td><td style="text-align:right">1,520</td><td style="text-align:right">0.92</td></tr>
+<tr><td class="rank">9</td><td><span class="err-code">r_verb_sva</span></td><td>Subject-verb agreement</td><td style="text-align:right">1,481</td><td style="text-align:right">0.9</td></tr>
+<tr><td class="rank">10</td><td><span class="err-code">other</span></td><td>Other (uncategorised)</td><td style="text-align:right">1,449</td><td style="text-align:right">0.88</td></tr>
+<tr><td class="rank">11</td><td><span class="err-code">m_prep</span></td><td>Missing preposition</td><td style="text-align:right">1,403</td><td style="text-align:right">0.85</td></tr>
+<tr><td class="rank">12</td><td><span class="err-code">r_det</span></td><td>Wrong determiner</td><td style="text-align:right">1,330</td><td style="text-align:right">0.81</td></tr>
+<tr><td class="rank">13</td><td><span class="err-code">r_prep</span></td><td>Wrong preposition</td><td style="text-align:right">1,278</td><td style="text-align:right">0.77</td></tr>
+<tr><td class="rank">14</td><td><span class="err-code">r_verb_form</span></td><td>Wrong verb form (gerund/infinitive)</td><td style="text-align:right">1,234</td><td style="text-align:right">0.75</td></tr>
+<tr><td class="rank">15</td><td><span class="err-code">r_morph</span></td><td>Morphological error</td><td style="text-align:right">1,130</td><td style="text-align:right">0.69</td></tr>
+<tr><td class="rank">16</td><td><span class="err-code">r_pron</span></td><td>Pronoun error</td><td style="text-align:right">1,033</td><td style="text-align:right">0.63</td></tr>
+<tr><td class="rank">17</td><td><span class="err-code">u_det</span></td><td>Unnecessary article</td><td style="text-align:right">1,023</td><td style="text-align:right">0.62</td></tr>
+<tr><td class="rank">18</td><td><span class="err-code">m_noun</span></td><td>Missing noun</td><td style="text-align:right">737</td><td style="text-align:right">0.45</td></tr>
+<tr><td class="rank">19</td><td><span class="err-code">m_pron</span></td><td>Missing pronoun</td><td style="text-align:right">732</td><td style="text-align:right">0.44</td></tr>
+<tr><td class="rank">20</td><td><span class="err-code">u_prep</span></td><td>Unnecessary preposition</td><td style="text-align:right">700</td><td style="text-align:right">0.42</td></tr>
+<tr><td class="rank">21</td><td><span class="err-code">m_verb_tense</span></td><td>Missing tense marker</td><td style="text-align:right">593</td><td style="text-align:right">0.36</td></tr>
+<tr><td class="rank">22</td><td><span class="err-code">r_adj</span></td><td>Adjective error</td><td style="text-align:right">551</td><td style="text-align:right">0.33</td></tr>
+<tr><td class="rank">23</td><td><span class="err-code">m_conj</span></td><td>Missing conjunction</td><td style="text-align:right">411</td><td style="text-align:right">0.25</td></tr>
+<tr><td class="rank">24</td><td><span class="err-code">u_noun</span></td><td>Unnecessary noun</td><td style="text-align:right">379</td><td style="text-align:right">0.23</td></tr>
+<tr><td class="rank">25</td><td><span class="err-code">u_verb</span></td><td>Unnecessary verb</td><td style="text-align:right">344</td><td style="text-align:right">0.21</td></tr>
+
+</tbody>
+</table>
+
+<h2>M3A-Level Students</h2>
+
+<table>
+<thead>
+<tr><th>Rank</th><th>Error Code</th><th>Meaning</th><th>Count</th><th>/100w</th></tr>
+</thead>
+<tbody>
+<tr><td class="rank">1</td><td><span class="err-code">r_orth</span></td><td style="font-size:.85em">Capitalisation (e.g. 'i' instead of 'I')</td><td style="text-align:right">5292</td><td style="text-align:right">4.25</td></tr><tr><td class="rank">2</td><td><span class="err-code">r_noun</span></td><td style="font-size:.85em">Noun form error</td><td style="text-align:right">5232</td><td style="text-align:right">4.2</td></tr><tr><td class="rank">3</td><td><span class="err-code">r_spell</span></td><td style="font-size:.85em">Spelling error</td><td style="text-align:right">3110</td><td style="text-align:right">2.5</td></tr><tr><td class="rank">4</td><td><span class="err-code">r_verb_tense</span></td><td style="font-size:.85em">Wrong verb tense</td><td style="text-align:right">1714</td><td style="text-align:right">1.38</td></tr><tr><td class="rank">5</td><td><span class="err-code">m_det</span></td><td style="font-size:.85em">Missing article (a, an, the)</td><td style="text-align:right">1705</td><td style="text-align:right">1.37</td></tr><tr><td class="rank">6</td><td><span class="err-code">m_verb</span></td><td style="font-size:.85em">Missing verb</td><td style="text-align:right">1329</td><td style="text-align:right">1.07</td></tr><tr><td class="rank">7</td><td><span class="err-code">r_noun_num</span></td><td style="font-size:.85em">Noun number (singular/plural)</td><td style="text-align:right">1236</td><td style="text-align:right">0.99</td></tr><tr><td class="rank">8</td><td><span class="err-code">r_verb_sva</span></td><td style="font-size:.85em">Subject-verb agreement</td><td style="text-align:right">1197</td><td style="text-align:right">0.96</td></tr><tr><td class="rank">9</td><td><span class="err-code">r_verb</span></td><td style="font-size:.85em">Verb error (general)</td><td style="text-align:right">1124</td><td style="text-align:right">0.9</td></tr><tr><td class="rank">10</td><td><span class="err-code">m_prep</span></td><td style="font-size:.85em">Missing preposition</td><td style="text-align:right">1113</td><td style="text-align:right">0.89</td></tr><tr><td class="rank">11</td><td><span class="err-code">other</span></td><td style="font-size:.85em">Other (uncategorised)</td><td style="text-align:right">1036</td><td style="text-align:right">0.83</td></tr><tr><td class="rank">12</td><td><span class="err-code">r_det</span></td><td style="font-size:.85em">Wrong determiner</td><td style="text-align:right">1030</td><td style="text-align:right">0.83</td></tr><tr><td class="rank">13</td><td><span class="err-code">r_prep</span></td><td style="font-size:.85em">Wrong preposition</td><td style="text-align:right">987</td><td style="text-align:right">0.79</td></tr><tr><td class="rank">14</td><td><span class="err-code">r_verb_form</span></td><td style="font-size:.85em">Wrong verb form (gerund/infinitive)</td><td style="text-align:right">942</td><td style="text-align:right">0.76</td></tr><tr><td class="rank">15</td><td><span class="err-code">r_morph</span></td><td style="font-size:.85em">Morphological error</td><td style="text-align:right">895</td><td style="text-align:right">0.72</td></tr><tr><td class="rank">16</td><td><span class="err-code">u_det</span></td><td style="font-size:.85em">Unnecessary article</td><td style="text-align:right">782</td><td style="text-align:right">0.63</td></tr><tr><td class="rank">17</td><td><span class="err-code">r_pron</span></td><td style="font-size:.85em">Pronoun error</td><td style="text-align:right">757</td><td style="text-align:right">0.61</td></tr><tr><td class="rank">18</td><td><span class="err-code">m_noun</span></td><td style="font-size:.85em">Missing noun</td><td style="text-align:right">569</td><td style="text-align:right">0.46</td></tr><tr><td class="rank">19</td><td><span class="err-code">u_prep</span></td><td style="font-size:.85em">Unnecessary preposition</td><td style="text-align:right">552</td><td style="text-align:right">0.44</td></tr><tr><td class="rank">20</td><td><span class="err-code">m_pron</span></td><td style="font-size:.85em">Missing pronoun</td><td style="text-align:right">509</td><td style="text-align:right">0.41</td></tr><tr><td class="rank">21</td><td><span class="err-code">r_adj</span></td><td style="font-size:.85em">Adjective error</td><td style="text-align:right">449</td><td style="text-align:right">0.36</td></tr><tr><td class="rank">22</td><td><span class="err-code">m_verb_tense</span></td><td style="font-size:.85em">Missing tense marker</td><td style="text-align:right">430</td><td style="text-align:right">0.35</td></tr><tr><td class="rank">23</td><td><span class="err-code">m_conj</span></td><td style="font-size:.85em">Missing conjunction</td><td style="text-align:right">348</td><td style="text-align:right">0.28</td></tr><tr><td class="rank">24</td><td><span class="err-code">u_noun</span></td><td style="font-size:.85em">Unnecessary noun</td><td style="text-align:right">312</td><td style="text-align:right">0.25</td></tr><tr><td class="rank">25</td><td><span class="err-code">u_verb</span></td><td style="font-size:.85em">Unnecessary verb</td><td style="text-align:right">260</td><td style="text-align:right">0.21</td></tr><tr><td class="rank">26</td><td><span class="err-code">u_pron</span></td><td style="font-size:.85em">Unnecessary pronoun</td><td style="text-align:right">208</td><td style="text-align:right">0.17</td></tr><tr><td class="rank">27</td><td><span class="err-code">r_adv</span></td><td style="font-size:.85em">Adverb error</td><td style="text-align:right">204</td><td style="text-align:right">0.16</td></tr><tr><td class="rank">28</td><td><span class="err-code">u_conj</span></td><td style="font-size:.85em">Unnecessary conjunction</td><td style="text-align:right">201</td><td style="text-align:right">0.16</td></tr><tr><td class="rank">29</td><td><span class="err-code">r_wo</span></td><td style="font-size:.85em">Word order error</td><td style="text-align:right">130</td><td style="text-align:right">0.1</td></tr><tr><td class="rank">30</td><td><span class="err-code">m_verb_form</span></td><td style="font-size:.85em">Missing verb form</td><td style="text-align:right">100</td><td style="text-align:right">0.08</td></tr><tr><td class="rank">31</td><td><span class="err-code">r_punct</span></td><td style="font-size:.85em">Punctuation error</td><td style="text-align:right">74</td><td style="text-align:right">0.06</td></tr><tr><td class="rank">32</td><td><span class="err-code">r_part</span></td><td style="font-size:.85em">Particle error</td><td style="text-align:right">69</td><td style="text-align:right">0.06</td></tr><tr><td class="rank">33</td><td><span class="err-code">m_punct</span></td><td style="font-size:.85em">Missing punctuation</td><td style="text-align:right">53</td><td style="text-align:right">0.04</td></tr><tr><td class="rank">34</td><td><span class="err-code">u_punct</span></td><td style="font-size:.85em">Unnecessary punctuation</td><td style="text-align:right">42</td><td style="text-align:right">0.03</td></tr><tr><td class="rank">35</td><td><span class="err-code">r_verb_infl</span></td><td style="font-size:.85em">Verb inflection error</td><td style="text-align:right">36</td><td style="text-align:right">0.03</td></tr><tr><td class="rank">36</td><td><span class="err-code">r_noun_infl</span></td><td style="font-size:.85em">Noun inflection error</td><td style="text-align:right">27</td><td style="text-align:right">0.02</td></tr><tr><td class="rank">37</td><td><span class="err-code">u_part</span></td><td style="font-size:.85em">Unnecessary particle</td><td style="text-align:right">25</td><td style="text-align:right">0.02</td></tr><tr><td class="rank">38</td><td><span class="err-code">m_part</span></td><td style="font-size:.85em">Missing particle</td><td style="text-align:right">24</td><td style="text-align:right">0.02</td></tr><tr><td class="rank">39</td><td><span class="err-code">r_adj_form</span></td><td style="font-size:.85em">Adjective form (comparative/superlative)</td><td style="text-align:right">22</td><td style="text-align:right">0.02</td></tr><tr><td class="rank">40</td><td><span class="err-code">r_conj</span></td><td style="font-size:.85em">Conjunction error</td><td style="text-align:right">17</td><td style="text-align:right">0.01</td></tr><tr><td class="rank">41</td><td><span class="err-code">r_noun_poss</span></td><td style="font-size:.85em">Possessive noun error</td><td style="text-align:right">12</td><td style="text-align:right">0.01</td></tr><tr><td class="rank">42</td><td><span class="err-code">r_contr</span></td><td style="font-size:.85em">Contraction error</td><td style="text-align:right">0</td><td style="text-align:right">0.0</td></tr><tr><td class="rank">43</td><td><span class="err-code">m_noun_num</span></td><td style="font-size:.85em">Missing plural marker</td><td style="text-align:right">0</td><td style="text-align:right">0.0</td></tr><tr><td class="rank">44</td><td><span class="err-code">unk</span></td><td style="font-size:.85em">Unknown error type</td><td style="text-align:right">0</td><td style="text-align:right">0.0</td></tr>
+</tbody>
+</table>
+
+<h2>M2A-Level Students</h2>
+
+<table>
+<thead>
+<tr><th>Rank</th><th>Error Code</th><th>Meaning</th><th>Count</th><th>/100w</th></tr>
+</thead>
+<tbody>
+<tr><td class="rank">1</td><td><span class="err-code">r_orth</span></td><td style="font-size:.85em">Capitalisation (e.g. 'i' instead of 'I')</td><td style="text-align:right">1829</td><td style="text-align:right">4.53</td></tr><tr><td class="rank">2</td><td><span class="err-code">r_noun</span></td><td style="font-size:.85em">Noun form error</td><td style="text-align:right">1566</td><td style="text-align:right">3.88</td></tr><tr><td class="rank">3</td><td><span class="err-code">r_spell</span></td><td style="font-size:.85em">Spelling error</td><td style="text-align:right">1024</td><td style="text-align:right">2.54</td></tr><tr><td class="rank">4</td><td><span class="err-code">r_verb_tense</span></td><td style="font-size:.85em">Wrong verb tense</td><td style="text-align:right">635</td><td style="text-align:right">1.57</td></tr><tr><td class="rank">5</td><td><span class="err-code">m_det</span></td><td style="font-size:.85em">Missing article (a, an, the)</td><td style="text-align:right">511</td><td style="text-align:right">1.27</td></tr><tr><td class="rank">6</td><td><span class="err-code">m_verb</span></td><td style="font-size:.85em">Missing verb</td><td style="text-align:right">474</td><td style="text-align:right">1.17</td></tr><tr><td class="rank">7</td><td><span class="err-code">other</span></td><td style="font-size:.85em">Other (uncategorised)</td><td style="text-align:right">413</td><td style="text-align:right">1.02</td></tr><tr><td class="rank">8</td><td><span class="err-code">r_verb</span></td><td style="font-size:.85em">Verb error (general)</td><td style="text-align:right">396</td><td style="text-align:right">0.98</td></tr><tr><td class="rank">9</td><td><span class="err-code">r_noun_num</span></td><td style="font-size:.85em">Noun number (singular/plural)</td><td style="text-align:right">376</td><td style="text-align:right">0.93</td></tr><tr><td class="rank">10</td><td><span class="err-code">r_det</span></td><td style="font-size:.85em">Wrong determiner</td><td style="text-align:right">300</td><td style="text-align:right">0.74</td></tr><tr><td class="rank">11</td><td><span class="err-code">r_verb_form</span></td><td style="font-size:.85em">Wrong verb form (gerund/infinitive)</td><td style="text-align:right">292</td><td style="text-align:right">0.72</td></tr><tr><td class="rank">12</td><td><span class="err-code">r_prep</span></td><td style="font-size:.85em">Wrong preposition</td><td style="text-align:right">291</td><td style="text-align:right">0.72</td></tr><tr><td class="rank">13</td><td><span class="err-code">m_prep</span></td><td style="font-size:.85em">Missing preposition</td><td style="text-align:right">290</td><td style="text-align:right">0.72</td></tr><tr><td class="rank">14</td><td><span class="err-code">r_verb_sva</span></td><td style="font-size:.85em">Subject-verb agreement</td><td style="text-align:right">284</td><td style="text-align:right">0.7</td></tr><tr><td class="rank">15</td><td><span class="err-code">r_pron</span></td><td style="font-size:.85em">Pronoun error</td><td style="text-align:right">276</td><td style="text-align:right">0.68</td></tr><tr><td class="rank">16</td><td><span class="err-code">u_det</span></td><td style="font-size:.85em">Unnecessary article</td><td style="text-align:right">241</td><td style="text-align:right">0.6</td></tr><tr><td class="rank">17</td><td><span class="err-code">r_morph</span></td><td style="font-size:.85em">Morphological error</td><td style="text-align:right">235</td><td style="text-align:right">0.58</td></tr><tr><td class="rank">18</td><td><span class="err-code">m_pron</span></td><td style="font-size:.85em">Missing pronoun</td><td style="text-align:right">223</td><td style="text-align:right">0.55</td></tr><tr><td class="rank">19</td><td><span class="err-code">m_noun</span></td><td style="font-size:.85em">Missing noun</td><td style="text-align:right">168</td><td style="text-align:right">0.42</td></tr><tr><td class="rank">20</td><td><span class="err-code">m_verb_tense</span></td><td style="font-size:.85em">Missing tense marker</td><td style="text-align:right">163</td><td style="text-align:right">0.4</td></tr><tr><td class="rank">21</td><td><span class="err-code">u_prep</span></td><td style="font-size:.85em">Unnecessary preposition</td><td style="text-align:right">148</td><td style="text-align:right">0.37</td></tr><tr><td class="rank">22</td><td><span class="err-code">r_adj</span></td><td style="font-size:.85em">Adjective error</td><td style="text-align:right">102</td><td style="text-align:right">0.25</td></tr><tr><td class="rank">23</td><td><span class="err-code">u_pron</span></td><td style="font-size:.85em">Unnecessary pronoun</td><td style="text-align:right">94</td><td style="text-align:right">0.23</td></tr><tr><td class="rank">24</td><td><span class="err-code">u_verb</span></td><td style="font-size:.85em">Unnecessary verb</td><td style="text-align:right">84</td><td style="text-align:right">0.21</td></tr><tr><td class="rank">25</td><td><span class="err-code">r_adv</span></td><td style="font-size:.85em">Adverb error</td><td style="text-align:right">78</td><td style="text-align:right">0.19</td></tr><tr><td class="rank">26</td><td><span class="err-code">u_conj</span></td><td style="font-size:.85em">Unnecessary conjunction</td><td style="text-align:right">69</td><td style="text-align:right">0.17</td></tr><tr><td class="rank">27</td><td><span class="err-code">u_noun</span></td><td style="font-size:.85em">Unnecessary noun</td><td style="text-align:right">67</td><td style="text-align:right">0.17</td></tr><tr><td class="rank">28</td><td><span class="err-code">r_wo</span></td><td style="font-size:.85em">Word order error</td><td style="text-align:right">63</td><td style="text-align:right">0.16</td></tr><tr><td class="rank">29</td><td><span class="err-code">m_conj</span></td><td style="font-size:.85em">Missing conjunction</td><td style="text-align:right">63</td><td style="text-align:right">0.16</td></tr><tr><td class="rank">30</td><td><span class="err-code">m_verb_form</span></td><td style="font-size:.85em">Missing verb form</td><td style="text-align:right">37</td><td style="text-align:right">0.09</td></tr><tr><td class="rank">31</td><td><span class="err-code">r_punct</span></td><td style="font-size:.85em">Punctuation error</td><td style="text-align:right">29</td><td style="text-align:right">0.07</td></tr><tr><td class="rank">32</td><td><span class="err-code">r_part</span></td><td style="font-size:.85em">Particle error</td><td style="text-align:right">24</td><td style="text-align:right">0.06</td></tr><tr><td class="rank">33</td><td><span class="err-code">u_punct</span></td><td style="font-size:.85em">Unnecessary punctuation</td><td style="text-align:right">20</td><td style="text-align:right">0.05</td></tr><tr><td class="rank">34</td><td><span class="err-code">m_punct</span></td><td style="font-size:.85em">Missing punctuation</td><td style="text-align:right">18</td><td style="text-align:right">0.04</td></tr><tr><td class="rank">35</td><td><span class="err-code">r_verb_infl</span></td><td style="font-size:.85em">Verb inflection error</td><td style="text-align:right">9</td><td style="text-align:right">0.02</td></tr><tr><td class="rank">36</td><td><span class="err-code">r_noun_infl</span></td><td style="font-size:.85em">Noun inflection error</td><td style="text-align:right">8</td><td style="text-align:right">0.02</td></tr><tr><td class="rank">37</td><td><span class="err-code">m_part</span></td><td style="font-size:.85em">Missing particle</td><td style="text-align:right">7</td><td style="text-align:right">0.02</td></tr><tr><td class="rank">38</td><td><span class="err-code">r_conj</span></td><td style="font-size:.85em">Conjunction error</td><td style="text-align:right">5</td><td style="text-align:right">0.01</td></tr><tr><td class="rank">39</td><td><span class="err-code">u_part</span></td><td style="font-size:.85em">Unnecessary particle</td><td style="text-align:right">4</td><td style="text-align:right">0.01</td></tr><tr><td class="rank">40</td><td><span class="err-code">r_adj_form</span></td><td style="font-size:.85em">Adjective form (comparative/superlative)</td><td style="text-align:right">3</td><td style="text-align:right">0.01</td></tr><tr><td class="rank">41</td><td><span class="err-code">r_contr</span></td><td style="font-size:.85em">Contraction error</td><td style="text-align:right">1</td><td style="text-align:right">0.0</td></tr><tr><td class="rank">42</td><td><span class="err-code">r_noun_poss</span></td><td style="font-size:.85em">Possessive noun error</td><td style="text-align:right">0</td><td style="text-align:right">0.0</td></tr><tr><td class="rank">43</td><td><span class="err-code">m_noun_num</span></td><td style="font-size:.85em">Missing plural marker</td><td style="text-align:right">0</td><td style="text-align:right">0.0</td></tr><tr><td class="rank">44</td><td><span class="err-code">unk</span></td><td style="font-size:.85em">Unknown error type</td><td style="text-align:right">0</td><td style="text-align:right">0.0</td></tr>
+</tbody>
+</table>
+
+<h1>References</h1>
+
+<ul class="ref-list">
+<li>Bryant, C., Felice, M., & Briscoe, T. (2017). Automatic annotation and evaluation of error types for grammatical error correction. <em>Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</em>, 793–805. https://aclanthology.org/P17-1074/</li>
+<li>Bryant, C., Felice, M., Andersen, & Briscoe, T. (2019). The BEA-2019 shared task on grammatical error correction. <em>Proceedings of the 14th Workshop on Innovative Use of NLP for Building Educational Applications</em>, 52–75. https://aclanthology.org/W19-4401/</li>
+<li>Bryant, C., Yuan, Z., Qorib, M. R., Cao, H., Ng, H. T., & Briscoe, T. (2023). Grammatical error correction: A survey of the state of the art. <em>Computational Linguistics</em>, 49(3), 643–701. https://doi.org/10.1162/coli_a_00478</li>
+<li>EF Education First. (2024). <em>EF English Proficiency Index 2024</em>. https://www.ef.com/epi/</li>
+<li>Ellis, R. (2008). <em>The Study of Second Language Acquisition</em> (2nd ed.). Oxford University Press.</li>
+<li>Goto, T., Sakai, Y., & Watanabe, T. (2026). Edit-level majority voting mitigates over-correction in LLM-based grammatical error correction. <em>arXiv preprint</em>.</li>
+<li>Lightbown, P. M., & Spada, N. (2013). <em>How Languages are Learned</em> (4th ed.). Oxford University Press.</li>
+<li>Nicholls, D., Caines, A., & Buttery, P. (2024). The Write & Improve Corpus 2024: Error-annotated and CEFR-labelled essays by learners of English. <em>Proceedings of the 19th Workshop on Innovative Use of NLP for Building Educational Applications</em>. https://www.repository.cam.ac.uk/items/ba155087-0754-4c6b-ade8-68858e1df2f0</li>
+<li>Hartshorne, J. K., Tenenbaum, J. B., & Pinker, S. (2018). A critical period for second language acquisition: Evidence from 2/3 million English speakers. <em>Cognition</em>, 177, 263–277. https://doi.org/10.1016/j.cognition.2018.04.007</li>
+<li>Selinker, L. (1972). Interlanguage. <em>International Review of Applied Linguistics</em>, 10(3), 209–231.</li>
+<li>Wei, X. (2008). Implication of IL fossilization in second language acquisition. <em>English Language Teaching</em>, 1(1), 127–131.</li>
+</ul>
+
+<p style="margin-top: 2em; font-size: .85em; color: #888; text-align: center;">Report generated June 6, 2026. Data source: Supabase <code>error_reports</code> table (986 records).</p>
+
+</body>
+</html>

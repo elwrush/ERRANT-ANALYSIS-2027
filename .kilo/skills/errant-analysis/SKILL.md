@@ -4,6 +4,10 @@
 
 Takes transcribed student essays (`outputs/{folder}/{student_id}.json`), runs whole-text correction via DeepSeek V4 Flash (deepseek-v4-flash), compares original vs corrected with ERRANT for structured error classification, generates personalised AI summaries via DeepSeek V4 Flash (non-thinking mode), and saves results to `local-working/`.
 
+Two workflows:
+- **Interactive/batch pipeline** (`src/errant_analysis.py`): processes ingestion JSONs from `outputs/` and saves to `local-working/`.
+- **Supabase batch upsert pipeline** (`src/migrate_writing_records.py` → `src/batch_errant_upsert.py`): reads records from `error_reports` where `error_percent IS NULL`, fetches student text from `student_submissions`, runs correction + ERRANT, and upserts error counts back to Supabase.
+
 ## Usage
 
 ### Interactive mode (human at terminal)
@@ -17,6 +21,13 @@ Shows a numbered menu of available files from `outputs/`. Select one to process.
 python src/errant_analysis.py --batch "M2-5A BASELINE"
 ```
 Processes all JSON files in `outputs/` with 5 parallel workers. Optional folder filter after `--batch` limits to a specific subfolder.
+
+### Supabase batch upsert (for migrated/supplemental records)
+```bash
+python src/migrate_writing_records.py
+python src/batch_errant_upsert.py
+```
+The migration script backs up existing error_reports, clones the table, and inserts new records from `student_submissions` with `error_percent: NULL`. The batch upsert script then processes those records: fetches student text from `student_submissions`, runs `correct_text()` + ERRANT annotation, and upserts error counts back to Supabase. The script includes automatic fluency rewrite detection (length ratio, edit density, sentence splitting checks) with retry logic — if a correction is flagged as a fluency rewrite (>1.3x length expansion, >1.0 edits/word, or >2x sentence splitting), it retries up to 3 times.
 
 ### Agent workflow
 
