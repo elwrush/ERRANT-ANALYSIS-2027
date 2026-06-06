@@ -118,6 +118,25 @@ def _post_process_correction(corrected, original):
     return text
 
 
+def is_fluency_rewrite(original, corrected, word_count, total_errors):
+    """Deterministic check — flags fluency rewrites before ERRANT annotation.
+    
+    Returns True if the correction appears to be a fluency rewrite rather than
+    a minimal edit. Uses three string-based heuristics, no model calls.
+    """
+    if not original or not corrected:
+        return False
+    if len(corrected) / len(original) > 1.3:
+        return True
+    if word_count > 0 and total_errors / word_count > 1.0:
+        return True
+    orig_sentences = len(re.split(r'[.!?]+', original))
+    corr_sentences = len(re.split(r'[.!?]+', corrected))
+    if orig_sentences > 0 and corr_sentences / orig_sentences > 2.0:
+        return True
+    return False
+
+
 def correct_text(original_text, nlp_model):
     """Correct the full text in one pass using GPT-4.1-nano.
     Preserves paragraph breaks and sentence boundaries.
@@ -965,25 +984,42 @@ def process_file(file_path, nlp=None, annotator=None):
     # Use annotator.parse() (whitespace-split tokenization) for ERRANT alignment
     orig_parse = annotator.parse(original_text)
 
-    # ---- Step 1: Whole-text correction via GPT-4.1-nano ----
-    corrected_text, llm_edits, _ = correct_text(original_text, nlp)
+    # ---- Step 1: Whole-text correction via DeepSeek V4 Flash ----
+    # Retry up to 3 times if fluency rewrite is detected
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        corrected_text, llm_edits, _ = correct_text(original_text, nlp)
+        corrected_text = corrected_text.strip()
+        
+        if attempt == 0:
+            tqdm.write(f"  Corrected length: {len(corrected_text)} chars")
 
-    corrected_text = corrected_text.strip()
-    tqdm.write(f"  Corrected length: {len(corrected_text)} chars")
+        output = _build_output(student_id, original_text, corrected_text, word_count, student_info, [],
+                               {"errors": [], "uncategorised": []}, original_text, 0, [])
+        output["record_id"] = record_id
+        output["submission_date"] = submission_date
+        output["topic"] = topic
 
-    output = _build_output(student_id, original_text, corrected_text, word_count, student_info, [],
-                           {"errors": [], "uncategorised": []}, original_text, 0, [])
-    output["record_id"] = record_id
-    output["submission_date"] = submission_date
-    output["topic"] = topic
-
-    # Noop check
-    if original_text.strip() == corrected_text.strip():
-        tqdm.write("  No corrections needed  -  text unchanged by model.")
-        output["metadata"] = build_metadata([], corrected_text, original_text)
-        output["llm_edits"] = llm_edits
-        return _finalize_output(output, file_path)
-
+        # Noop check
+        if original_text.strip() == corrected_text.strip():
+            tqdm.write("  No corrections needed  -  text unchanged by model.")
+            output["metadata"] = build_metadata([], corrected_text, original_text)
+            output["llm_edits"] = llm_edits
+            return _finalize_output(output, file_path)
+        
+        # Quick ERRANT check for fluency rewrite detection
+        cor_parse = annotator.parse(corrected_text)
+        edits_check = annotator.annotate(orig_parse, cor_parse)
+        total_edits_est = len(edits_check)
+        
+        if not is_fluency_rewrite(original_text, corrected_text, word_count, total_edits_est):
+            break  # good result — proceed to full annotation
+        
+        if attempt < max_attempts - 1:
+            tqdm.write(f"  Fluency rewrite detected (attempt {attempt + 1}/{max_attempts}), retrying...")
+    else:
+        tqdm.write(f"  WARNING: fluency rewrite persisted after {max_attempts} attempts — using last result")
+    
     # ---- Step 2: Run ERRANT diff on original vs corrected ----
     cor_parse = annotator.parse(corrected_text)
     edits = annotator.annotate(orig_parse, cor_parse)

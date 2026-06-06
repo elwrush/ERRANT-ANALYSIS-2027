@@ -20,35 +20,10 @@ from errant_analysis import (
     correct_text,
     classify_edits,
     pre_split_edits,
+    is_fluency_rewrite,
     ERRANT_CODE_TO_COLUMN,
     ERROR_CODE_COLUMNS,
 )
-
-
-def is_fluency_rewrite(original, corrected, word_count, total_errors):
-    """Deterministic check — flags fluency rewrites before ERRANT annotation.
-    
-    Returns True if the correction appears to be a fluency rewrite rather than
-    a minimal edit. Uses three string-based heuristics, no model calls.
-    """
-    if not original or not corrected:
-        return False
-    
-    # Check 1: Text length expansion (>1.3x) — fluency rewrites add explanatory content
-    if len(corrected) / len(original) > 1.3:
-        return True
-    
-    # Check 2: Edit density — more than 1 edit per word is near-certain fluency rewrite
-    if word_count > 0 and total_errors / word_count > 1.0:
-        return True
-    
-    # Check 3: Sentence splitting — fluency rewrites break run-ons into tidy sentences
-    orig_sentences = len(re.split(r'[.!?]+', original))
-    corr_sentences = len(re.split(r'[.!?]+', corrected))
-    if orig_sentences > 0 and corr_sentences / orig_sentences > 2.0:
-        return True
-    
-    return False
 
 
 def process_one_record(student_text, word_count, nlp, annotator, max_attempts=3):
