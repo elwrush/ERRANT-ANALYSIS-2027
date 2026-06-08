@@ -349,11 +349,11 @@ def _sanitize_unicode(text):
 
 
 
-SUMMARY_PROMPT_FMT = """You are an experienced ESL writing teacher. A student ({name}, CEFR B1-B2 level) wrote the original text below. A corrected version is also provided.
+SUMMARY_PROMPT_FMT = """You are an experienced ESL writing teacher. A student ({name}, CEFR B1-B2 level) wrote the text below.
 
-Identify the 3 most important errors in the student's original writing. Write your explanations and corrections to academic English standards — no comma splices, fused sentences, or sentence fragments.
+Read the student's writing carefully and identify the 3 most important errors. For each error, explain what is wrong and give a clear correction. Write your explanations to academic English standards.
 
-Use this exact JSON format. The example errors are for illustration — replace with the student's actual errors:
+Use this exact JSON format:
 
 {{
   "praise": "2-3 warm sentences about something specific they wrote. Keep it genuine. Do NOT use: shine, sparkle, glow, brilliant, amazing, incredible.",
@@ -364,37 +364,33 @@ Use this exact JSON format. The example errors are for illustration — replace 
       "explanation": "You wrote \\"possesion\\" but the correct spelling is \\"possession.\\" Remember to double the 's' in the middle: poss-ess-ion."
     }},
     {{
-      "name": "Sentence fragment",
-      "explanation": "You wrote \\"In my free time.\\" with a full stop, but this group of words is not a complete sentence because it has no main verb. You cannot put a full stop here. Instead, connect it to your next sentence. For example: \\"In my free time, I love to play computer games with my friends.\\""
+      "name": "Missing subject in clause",
+      "explanation": "You wrote \\"when come back from travel\\" but this clause is missing a subject. Add \\"I\\" before \\"come.\\" Write: \\"when I come back from the trip.\\""
     }},
     {{
-      "name": "Comma splice",
-      "explanation": "You wrote \\"I love to play computer games with my friends, I am always learning\\" which is two complete thoughts joined by only a comma. Add a connecting word like 'and' after the comma: \\"I love to play computer games with my friends, and I am always learning.\\""
+      "name": "Verb form",
+      "explanation": "You wrote \\"I like to reading\\" but after \\"like to,\\" use the base form of the verb. Write: \\"I like to read.\\""
     }}
   ]
 }}
 
 CRITICAL RULES:
-- Every phrase in double quotes within the explanation must appear verbatim in the original text below.
+- Every phrase in double quotes that quotes the student's error must appear verbatim in the student's text below. (Correction examples in quotes after "Write:" need not appear in the text.)
 - Do NOT change, rephrase, or invent the student's words.
 - Explain why it is wrong and how to fix it, with a natural example.
+- The error name should be a clear, specific category like "Verb tense", "Subject-verb agreement", "Spelling", "Missing subject", "Word form", "Preposition", etc.
 
-ORIGINAL TEXT:
+STUDENT TEXT:
 {original_text}
-
-CORRECTED TEXT:
-{corrected_text}
 
 Return ONLY the JSON object — no markdown, no code fences, no extra text."""
 
 
-def _verify_structured_summary(summary_data, original_text, corrected_text):
-    """Verify that every double-quoted phrase in each error's explanation
-    appears verbatim in either the original or corrected text.
-    Explanations naturally quote the student's error (from original) and
-    show example fixes (from corrected). Both are legitimate.
-    Returns list of warnings (empty = clean). Warnings do NOT trigger the
-    fallback — only empty/unparseable summary_data does."""
+def _verify_structured_summary(summary_data, original_text):
+    """Verify that every double-quoted phrase quoting the student's error
+    appears verbatim in the original text. Correction examples after
+    'Write:' are skipped — they state the correct form and won't appear.
+    Returns list of warnings (empty = clean)."""
     warnings = []
     
     if not isinstance(summary_data, dict):
@@ -403,12 +399,13 @@ def _verify_structured_summary(summary_data, original_text, corrected_text):
     errors = summary_data.get("errors", [])
     for i, err in enumerate(errors):
         explanation = err.get("explanation", "")
-        # Extract all double-quoted phrases from the explanation
-        quoted_phrases = re.findall(r'"([^"]*)"', explanation)
+        # Split on 'Write:' — everything before is the error description,
+        # everything after is correction examples that need not appear
+        before_write = explanation.split("Write:")[0]
+        quoted_phrases = re.findall(r'"([^"]*)"', before_write)
         for j, phrase in enumerate(quoted_phrases):
-            # Accept if in EITHER original or corrected
-            if phrase not in original_text and phrase not in corrected_text:
-                warnings.append(f"E{i}: phrase '{phrase[:80]}' not found verbatim in original or corrected")
+            if phrase not in original_text:
+                warnings.append(f"E{i}: phrase '{phrase[:80]}' not found verbatim in original")
     
     return warnings
 
@@ -439,16 +436,14 @@ def render_summary_to_text(summary_data, name):
 
 
 def generate_summary(output: dict) -> dict:
-    """Generate structured summary data from LLM.
+    """Generate structured summary data from LLM using original text only.
     Returns {"summary": rendered_text_str, "summary_data": dict}."""
     name = output.get("name", "student")
     original_text = output.get("original_text", "")
-    corrected_text = output.get("corrected_text", "")
 
     prompt = SUMMARY_PROMPT_FMT.format(
         name=name,
         original_text=original_text,
-        corrected_text=corrected_text,
     )
     result = _call_api(prompt, SUMMARY_TEMPERATURE, model=SUMMARY_MODEL, disable_thinking=True)
     result = _sanitize_unicode(result or "")
@@ -474,11 +469,10 @@ def generate_summary(output: dict) -> dict:
     
     if isinstance(parsed, dict) and "praise" in parsed and "errors" in parsed:
         summary_data = parsed
-        # Verify quotes — warn only, never reject. Pedagogical examples
-        # may differ slightly from the corrected text (different punctuation,
-        # truncated sentences for clarity). The model knows best how to explain.
-        corrected_plain = output.get("corrected_text", "")
-        warnings = _verify_structured_summary(summary_data, original_text, corrected_plain)
+        # Verify quotes — warn only, never reject. Only checks error-quote
+        # phrases against the original text; correction examples after "Write:"
+        # are naturally not in the original and are skipped.
+        warnings = _verify_structured_summary(summary_data, original_text)
         for w in warnings[:3]:
             tqdm.write(f"  Summary verification (info only): {w}")
         
