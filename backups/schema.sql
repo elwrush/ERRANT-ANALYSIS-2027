@@ -820,6 +820,7 @@ CREATE TABLE IF NOT EXISTS "public"."writing_assessment_cambridge" (
     "language_feedback" "text",
     "error_count" numeric(5,2),
     "error_types" "jsonb",
+    "date" "date",
     CONSTRAINT "student_submissions_writing_cambridge_academic_year_check" CHECK ((("academic_year" >= 2000) AND ("academic_year" <= 2100))),
     CONSTRAINT "student_submissions_writing_cambridge_assessment_type_check" CHECK (("assessment_type" = ANY (ARRAY['Formative'::"text", 'Term 1 Midterm'::"text", 'Term 1 Finals'::"text", 'Term 2 Midterm'::"text", 'Term 2 Finals'::"text", 'CA'::"text", 'Benchmark'::"text"]))),
     CONSTRAINT "student_submissions_writing_cambridge_cefr_check" CHECK (("cefr" = ANY (ARRAY['NA'::"text", 'A1'::"text", 'A1+'::"text", 'A2'::"text", 'A2+'::"text", 'B1'::"text", 'B1+'::"text", 'B2'::"text", 'B2+'::"text", 'C1'::"text", 'C1+'::"text", 'C2'::"text"]))),
