@@ -644,6 +644,40 @@ ALTER SEQUENCE "public"."reports_id_seq" OWNED BY "public"."reports"."id";
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."speaking_assessment_cambridge" (
+    "student_id" "text" NOT NULL,
+    "submission_date" "date" DEFAULT CURRENT_DATE NOT NULL,
+    "date" "date",
+    "academic_year" integer,
+    "topic" "text",
+    "task" "text",
+    "student_text" "text",
+    "word_count" integer,
+    "grammar_vocabulary_score" numeric,
+    "grammar_vocabulary_feedback" "text",
+    "discourse_management_score" numeric,
+    "discourse_management_feedback" "text",
+    "pronunciation_score" numeric,
+    "pronunciation_feedback" "text",
+    "interactive_communication_score" numeric,
+    "interactive_communication_feedback" "text",
+    "overall_score" numeric,
+    "summary_comment" "text",
+    "cefr" "text",
+    "percentage" integer,
+    "error_count" numeric,
+    "error_types" "jsonb",
+    "skill" "text" DEFAULT 'Speaking'::"text",
+    "assessment_type" "text",
+    "exam_type" "text",
+    "duration_seconds" numeric,
+    "audio_url" "text"
+);
+
+
+ALTER TABLE "public"."speaking_assessment_cambridge" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."student_submissions" (
     "id" integer NOT NULL,
     "student_id" "text" NOT NULL,
@@ -933,6 +967,11 @@ ALTER TABLE ONLY "public"."reports"
 
 
 
+ALTER TABLE ONLY "public"."speaking_assessment_cambridge"
+    ADD CONSTRAINT "speaking_assessment_cambridge_pkey" PRIMARY KEY ("student_id", "submission_date");
+
+
+
 ALTER TABLE ONLY "public"."student_submissions"
     ADD CONSTRAINT "student_submissions_pkey" PRIMARY KEY ("id");
 
@@ -1104,6 +1143,10 @@ CREATE POLICY "Users can manage their own classlists" ON "public"."classlists" T
 
 
 
+CREATE POLICY "authenticated_select" ON "public"."speaking_assessment_cambridge" FOR SELECT TO "authenticated" USING (true);
+
+
+
 ALTER TABLE "public"."classlists" ENABLE ROW LEVEL SECURITY;
 
 
@@ -1111,6 +1154,13 @@ ALTER TABLE "public"."error_reports" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "service_role_all" ON "public"."speaking_assessment_cambridge" TO "service_role" USING (true) WITH CHECK (true);
+
+
+
+ALTER TABLE "public"."speaking_assessment_cambridge" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."student_submissions" ENABLE ROW LEVEL SECURITY;
@@ -1419,6 +1469,12 @@ GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public".
 GRANT ALL ON SEQUENCE "public"."reports_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."reports_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."reports_id_seq" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."speaking_assessment_cambridge" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."speaking_assessment_cambridge" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."speaking_assessment_cambridge" TO "service_role";
 
 
 
