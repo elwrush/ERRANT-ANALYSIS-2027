@@ -4,7 +4,7 @@ SET session_replication_role = replica;
 -- PostgreSQL database dump
 --
 
--- \restrict cYqg4iNC2AMJ3DZdqmoK1OBEu7NgRBSqd1EPO5gkcAuJJvJEmGFcHtYZUk4vdpk
+-- \restrict 6a9sjVc3IWsMQUyKcEQDxYoZuS3IdwKioUFhNETWRNGHBtCiRnkQPo0QqhHofnh
 
 -- Dumped from database version 15.8
 -- Dumped by pg_dump version 17.6
@@ -5946,6 +5946,7 @@ ed7ddf8b-97a1-49cd-bfe2-ebae7f24e9c5	\N	\N	\N	\N	google			2026-06-13 07:28:26.20
 b080a048-893f-4794-ba4e-863045398ba0	\N	\N	\N	\N	discord			2026-06-13 07:28:30.264929+00	2026-06-13 07:28:30.264929+00	oauth	\N	\N	https://elwrush.xyz/	\N	\N	f
 2f9d9e7e-ad39-4305-bdf0-bd8fd4baa45d	\N	\N	\N	\N	google			2026-06-13 07:28:47.838941+00	2026-06-13 07:28:47.838941+00	oauth	\N	\N	https://elwrush.xyz/	\N	\N	f
 3279064e-3105-4b4a-8c90-47d4fbddd965	\N	\N	\N	\N	google			2026-06-13 07:28:49.591794+00	2026-06-13 07:28:49.591794+00	oauth	\N	\N	https://elwrush.xyz/	\N	\N	f
+964ec7e7-89b9-4b0e-b32a-2b19acddd15d	\N	\N	\N	\N	google			2026-07-04 11:35:11.997215+00	2026-07-04 11:35:11.997215+00	oauth	\N	\N	https://elwrush.xyz/	\N	\N	f
 \.
 
 
@@ -15118,6 +15119,6 @@ SELECT pg_catalog.setval('"public"."student_submissions_id_seq"', 4145, true);
 -- PostgreSQL database dump complete
 --
 
--- \unrestrict cYqg4iNC2AMJ3DZdqmoK1OBEu7NgRBSqd1EPO5gkcAuJJvJEmGFcHtYZUk4vdpk
+-- \unrestrict 6a9sjVc3IWsMQUyKcEQDxYoZuS3IdwKioUFhNETWRNGHBtCiRnkQPo0QqhHofnh
 
 RESET ALL;
