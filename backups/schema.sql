@@ -650,7 +650,6 @@ CREATE TABLE IF NOT EXISTS "public"."speaking_assessment_cambridge" (
     "date" "date",
     "academic_year" integer,
     "topic" "text",
-    "task" "text",
     "student_text" "text",
     "word_count" integer,
     "grammar_vocabulary_score" numeric,
@@ -664,14 +663,13 @@ CREATE TABLE IF NOT EXISTS "public"."speaking_assessment_cambridge" (
     "overall_score" numeric,
     "summary_comment" "text",
     "cefr" "text",
-    "percentage" integer,
-    "error_count" numeric,
-    "error_types" "jsonb",
     "skill" "text" DEFAULT 'Speaking'::"text",
-    "assessment_type" "text",
-    "exam_type" "text",
+    "assessment_type" "text" NOT NULL,
+    "exam_type" "text" NOT NULL,
     "duration_seconds" numeric,
-    "audio_url" "text"
+    "audio_url" "text",
+    CONSTRAINT "speaking_assessment_cambridge_assessment_type_check" CHECK (("assessment_type" = ANY (ARRAY['CA'::"text", 'Formative'::"text", 'Term 1 Finals'::"text", 'Term 2 Finals'::"text"]))),
+    CONSTRAINT "speaking_assessment_cambridge_exam_type_check" CHECK (("exam_type" = ANY (ARRAY['KEY'::"text", 'PET'::"text", 'FIRST'::"text"])))
 );
 
 
@@ -698,15 +696,7 @@ CREATE TABLE IF NOT EXISTS "public"."student_submissions" (
     "skill" "text",
     "assessment_type" "text" DEFAULT 'Formative'::"text",
     "exam_type" "text" DEFAULT 'PET'::"text",
-    "speaking_grammar_vocab_score" numeric,
-    "speaking_discourse_management_score" numeric,
-    "speaking_pron_score" numeric,
-    "speaking_interactive_communication_score" numeric,
-    "speaking_grammar_vocab_comment" "text",
-    "speaking_discourse_management_comment" "text",
     "speaking_pron_comment" "text",
-    "speaking_interactive_communication_comment" "text",
-    "teacher_global_achievement_comment" "text",
     "speaking_summary" "text",
     "user_id" "uuid",
     "reading_score" numeric,
@@ -722,7 +712,6 @@ CREATE TABLE IF NOT EXISTS "public"."student_submissions" (
     "use_of_english_average" numeric,
     "use_of_english_comment" "text",
     "cefr" "text",
-    "errors" numeric,
     "academic_year" integer NOT NULL,
     CONSTRAINT "student_submissions_academic_year_check" CHECK ((("academic_year" >= 2000) AND ("academic_year" <= 2100))),
     CONSTRAINT "student_submissions_assessment_type_check" CHECK (("assessment_type" = ANY (ARRAY['Formative'::"text", 'Term 1 Midterm'::"text", 'Term 1 Finals'::"text", 'Term 2 Midterm'::"text", 'Term 2 Finals'::"text", 'CA'::"text", 'Benchmark'::"text"]))),
@@ -732,10 +721,6 @@ CREATE TABLE IF NOT EXISTS "public"."student_submissions" (
 
 
 ALTER TABLE "public"."student_submissions" OWNER TO "postgres";
-
-
-COMMENT ON COLUMN "public"."student_submissions"."errors" IS 'Show the number of errors a student makes in their writing';
-
 
 
 CREATE SEQUENCE IF NOT EXISTS "public"."student_submissions_id_seq"
