@@ -449,6 +449,41 @@ SET default_tablespace = '';
 SET default_table_access_method = "heap";
 
 
+CREATE TABLE IF NOT EXISTS "public"."cambridge_reading_grades" (
+    "id" integer NOT NULL,
+    "student_id" "text" NOT NULL,
+    "submission_date" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
+    "academic_year" integer NOT NULL,
+    "exam_type" "text" DEFAULT 'PET'::"text",
+    "assessment_type" "text" DEFAULT 'Formative'::"text",
+    "topic" "text",
+    "reading_score" numeric,
+    "reading_average" numeric,
+    "reading_comment" "text",
+    "cefr" "text",
+    "skill" "text"
+);
+
+
+ALTER TABLE "public"."cambridge_reading_grades" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."cambridge_reading_grades_id_seq"
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."cambridge_reading_grades_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."cambridge_reading_grades_id_seq" OWNED BY "public"."cambridge_reading_grades"."id";
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."cefr_levels" (
     "level" character varying(3) NOT NULL,
     "description" "text"
@@ -592,29 +627,6 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
 
 
 ALTER TABLE "public"."profiles" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."reading_lab_student_answers" (
-    "student_id" character varying(255) NOT NULL,
-    "test_paper" character varying(255) NOT NULL,
-    "score" integer,
-    "qu1" integer,
-    "qu2" integer,
-    "qu3" integer,
-    "qu4" integer,
-    "qu5" integer,
-    "qu6" integer,
-    "qu7" integer,
-    "qu8" integer,
-    "qu9" integer,
-    "qu10" integer,
-    "qu11" integer,
-    "qu12" integer,
-    "submitted_at" timestamp with time zone DEFAULT "now"() NOT NULL
-);
-
-
-ALTER TABLE "public"."reading_lab_student_answers" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."reports" (
@@ -889,11 +901,20 @@ Includes total_errors, error_count_per_100, errors_by_type, and individual edits
 
 
 
+ALTER TABLE ONLY "public"."cambridge_reading_grades" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."cambridge_reading_grades_id_seq"'::"regclass");
+
+
+
 ALTER TABLE ONLY "public"."reports" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."reports_id_seq"'::"regclass");
 
 
 
 ALTER TABLE ONLY "public"."student_submissions" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."student_submissions_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."cambridge_reading_grades"
+    ADD CONSTRAINT "cambridge_reading_grades_pkey" PRIMARY KEY ("id");
 
 
 
@@ -939,11 +960,6 @@ ALTER TABLE ONLY "public"."profiles"
 
 ALTER TABLE ONLY "public"."profiles"
     ADD CONSTRAINT "profiles_student_id_key" UNIQUE ("student_id");
-
-
-
-ALTER TABLE ONLY "public"."reading_lab_student_answers"
-    ADD CONSTRAINT "reading_lab_student_answers_pkey" PRIMARY KEY ("student_id", "test_paper", "submitted_at");
 
 
 
@@ -1096,6 +1112,10 @@ CREATE POLICY "Allow users to update their own submissions" ON "public"."student
 
 
 
+CREATE POLICY "Authenticated users can read cambridge_reading_grades" ON "public"."cambridge_reading_grades" FOR SELECT USING (("auth"."role"() = 'authenticated'::"text"));
+
+
+
 CREATE POLICY "Enable insert for authenticated users only" ON "public"."profiles" FOR INSERT WITH CHECK (("id" = ( SELECT "auth"."uid"() AS "uid")));
 
 
@@ -1130,6 +1150,9 @@ CREATE POLICY "Users can manage their own classlists" ON "public"."classlists" T
 
 CREATE POLICY "authenticated_select" ON "public"."speaking_assessment_cambridge" FOR SELECT TO "authenticated" USING (true);
 
+
+
+ALTER TABLE "public"."cambridge_reading_grades" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."classlists" ENABLE ROW LEVEL SECURITY;
@@ -1397,6 +1420,18 @@ GRANT ALL ON FUNCTION "public"."update_overall_cefr_trigger"() TO "service_role"
 
 
 
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cambridge_reading_grades" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cambridge_reading_grades" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cambridge_reading_grades" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."cambridge_reading_grades_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."cambridge_reading_grades_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."cambridge_reading_grades_id_seq" TO "service_role";
+
+
+
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "service_role";
@@ -1436,12 +1471,6 @@ GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public".
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."profiles" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."profiles" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."profiles" TO "service_role";
-
-
-
-GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."reading_lab_student_answers" TO "anon";
-GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."reading_lab_student_answers" TO "authenticated";
-GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."reading_lab_student_answers" TO "service_role";
 
 
 
