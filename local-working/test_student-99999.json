@@ -3,25 +3,33 @@
   "original_text": "test",
   "corrected_text": "test",
   "sentence_pairs": [],
-  "errant_analysis": {
-    "errors": [],
-    "uncategorised": []
-  },
   "corrected_typst": "test",
   "error_rate": 0,
   "word_count": 0,
+  "name": "",
+  "class": "",
+  "record_id": "",
+  "submission_date": "",
+  "topic": "",
+  "summary": "",
+  "summary_data": null,
+  "summary_type": "",
+  "date_created": "",
   "metadata": {
+    "model": "test",
     "identity_check": true,
     "overcorrection_count": 0,
-    "model": "test",
-    "temperature": 0.1,
-    "total_edit_count": 0,
-    "uncertain_edit_count": 0,
     "overcorrection_warnings": [],
+    "total_edit_count": 0,
     "edit_width_stats": {
       "max_span": 0,
       "avg_span": 0,
       "multi_token_edits": 0
     }
+  },
+  "errant_analysis": {
+    "errors": [],
+    "uncategorised": [],
+    "dropped_edits": {}
   }
 }
