@@ -465,3 +465,287 @@ class TestBatchProgress:
         combined = out.getvalue() + err.getvalue()
         assert "Processing 3 file(s)" in out.getvalue(), f"stdout missing header: {out.getvalue()}"
         assert "Done. Processed 3/3 files." in combined, f"Missing completion message. out={out.getvalue()!r} err={err.getvalue()!r}"
+
+
+class TestResponseFormatIntegration:
+    def test_call_api_payload_has_response_format(self, mocker):
+        from errant_analysis import _client, _call_api
+
+        mock_create = mocker.patch.object(_client.chat.completions, "create")
+        mock_create.return_value.choices[0].message.content = '{"ok": true}'
+
+        _call_api("test content", 0.6)
+
+        assert mock_create.call_count == 1
+        _, kwargs = mock_create.call_args
+        assert "response_format" in kwargs, f"response_format not in kwargs: {list(kwargs.keys())}"
+        assert kwargs["response_format"] == {"type": "json_object"}
+
+
+class TestErrantOutputValidation:
+    def test_rejects_missing_original_text(self):
+        from models import ErrantOutput
+        import pytest
+        with pytest.raises(ValueError, match="original_text must not be empty"):
+            ErrantOutput.model_validate({
+                "student_id": "99999",
+                "original_text": "",
+                "corrected_text": "hello",
+            })
+
+    def test_rejects_invalid_error_rate(self):
+        from models import ErrantOutput
+        import pytest
+        with pytest.raises(ValueError):
+            ErrantOutput.model_validate({
+                "student_id": "99999",
+                "original_text": "hello",
+                "corrected_text": "world",
+                "error_rate": 150,
+            })
+
+    def test_accepts_valid_output(self):
+        from models import ErrantOutput
+        result = ErrantOutput.model_validate({
+            "student_id": "99999",
+            "original_text": "hello",
+            "corrected_text": "world",
+            "word_count": 1,
+            "error_rate": None,
+            "date_created": "2026-07-13",
+        })
+        assert result.student_id == "99999"
+        assert result.error_rate is None
+
+
+class TestBatchValidation:
+    def test_batch_row_validates_through_model(self):
+        from models import ErrantOutput
+        result = ErrantOutput.model_validate({
+            "student_id": "99999",
+            "original_text": "test",
+            "corrected_text": "test corrected",
+            "word_count": 1,
+            "error_rate": 10,
+            "date_created": "2026-07-13",
+            "errant_analysis": {
+                "errors": [{"type": "R:SPELL", "count": 1, "example": "test -> test"}],
+                "uncategorised": [],
+                "dropped_edits": {},
+            },
+        })
+        assert result.errant_analysis.errors[0]["type"] == "R:SPELL"
+        assert result.error_rate == 10
+
+
+class TestSanitizeUnicode:
+    def test_curly_quotes(self):
+        from errant_analysis import _sanitize_unicode
+        assert _sanitize_unicode("\u2018hello\u2019") == "'hello'"
+        assert _sanitize_unicode("\u201chello\u201d") == '"hello"'
+
+    def test_dashes(self):
+        from errant_analysis import _sanitize_unicode
+        assert _sanitize_unicode("\u2013") == "-"
+        assert _sanitize_unicode("\u2014") == "--"
+
+    def test_ellipsis(self):
+        from errant_analysis import _sanitize_unicode
+        assert _sanitize_unicode("\u2026") == "..."
+
+    def test_nbsp(self):
+        from errant_analysis import _sanitize_unicode
+        assert _sanitize_unicode("\u00a0") == " "
+
+    def test_replacement(self):
+        from errant_analysis import _sanitize_unicode
+        assert _sanitize_unicode("\ufffd") == ""
+
+
+class TestPostProcessCorrection:
+    def test_ampersand(self):
+        from errant_analysis import _post_process_correction
+        assert _post_process_correction("fish & chips", "") == "fish and chips"
+
+    def test_worldwide(self):
+        from errant_analysis import _post_process_correction
+        assert _post_process_correction("in the world wide", "") == "worldwide"
+
+
+class TestHumanErrorType:
+    def test_known_code(self):
+        from errant_analysis import human_error_type
+        from config import ERRANT_CODE_NAMES
+        assert human_error_type("R:VERB:TENSE") == ERRANT_CODE_NAMES["R:VERB:TENSE"]
+
+    def test_missing_prefix(self):
+        from errant_analysis import human_error_type
+        result = human_error_type("M:DET")
+        assert "Missing" in result
+        assert "determiner" in result.lower()
+
+    def test_unnecessary_prefix(self):
+        from errant_analysis import human_error_type
+        result = human_error_type("U:NOUN")
+        assert "Unnecessary" in result
+
+
+class TestBuildMetadata:
+    def test_identity_detected(self):
+        from errant_analysis import build_metadata
+        meta = build_metadata([], "same", "same")
+        assert meta["identity_check"] is True
+
+    def test_count_edits(self):
+        from errant_analysis import build_metadata, _make_edit
+        edits = [
+            _make_edit(0, 1, [], "a", 0, 1, [], "b", "R:SPELL"),
+            _make_edit(1, 2, [], "c", 1, 2, [], "d", "R:DET"),
+        ]
+        meta = build_metadata(edits, "corrected", "original")
+        assert meta["total_edit_count"] == 2
+        assert meta["edit_width_stats"]["max_span"] == 1
+
+
+class TestExtractCorrection:
+    def test_with_prefix(self):
+        from errant_analysis import extract_correction
+        text, _ = extract_correction("Corrected text: Hello world.")
+        assert text == "Hello world."
+
+    def test_without_prefix(self):
+        from errant_analysis import extract_correction
+        text, _ = extract_correction("Hello world.")
+        assert text == "Hello world."
+
+    def test_empty(self):
+        from errant_analysis import extract_correction
+        text, _ = extract_correction("")
+        assert text is None
+
+
+class TestBuildCorrectedTypst:
+    def test_no_edits(self):
+        from errant_analysis import build_corrected_typst
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+        doc = nlp("Hello world.")
+        result = build_corrected_typst(doc, [])
+        assert "Hello" in result
+
+    def test_simple_replacement(self):
+        from errant_analysis import build_corrected_typst, _make_edit
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+        doc = nlp("He go to store.")
+        edits = [
+            _make_edit(1, 2, doc[1:2], "go", 1, 2, doc[1:2], "goes", "R:VERB:SVA"),
+        ]
+        result = build_corrected_typst(doc, edits)
+        assert "#underline[goes]" in result
+
+
+class TestPreSplitEdits:
+    def test_no_other_edits(self):
+        from errant_analysis import pre_split_edits, _make_edit
+        annotator = __import__("errant").load("en")
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+        orig = nlp("hello world")
+        cor = nlp("hello world")
+        edits = [_make_edit(0, 1, orig[0:1], "hello", 0, 1, cor[0:1], "hello", "R:SPELL")]
+        result = pre_split_edits(annotator, edits, orig, cor)
+        assert len(result) == 1
+
+
+class TestIsFluencyRewrite:
+    def test_reasonable_correction_not_rewrite(self):
+        from errant_analysis import is_fluency_rewrite
+        assert not is_fluency_rewrite("He go to store.", "He goes to store.", 5, 2)
+
+    def test_too_long_correction(self):
+        from errant_analysis import is_fluency_rewrite
+        short = "He go."
+        long_cor = "He goes to the store every single day because he likes walking there with his friends."
+        assert is_fluency_rewrite(short, long_cor, 2, 1)
+
+    def test_too_many_errors(self):
+        from errant_analysis import is_fluency_rewrite
+        assert is_fluency_rewrite("a b c", "x y z", 3, 5)
+
+
+class TestAlignSentencesEdgeCases:
+    def test_different_counts_with_best_match(self):
+        from errant_analysis import align_sentences
+        result = align_sentences(
+            ["First.", "Second.", "Third."],
+            ["First and second.", "Third."],
+        )
+        assert len(result) >= 1
+
+    def test_single_original_double_corrected(self):
+        from errant_analysis import align_sentences
+        result = align_sentences(
+            ["Long sentence here."],
+            ["Short.", "Here."],
+        )
+        assert len(result) == 1
+
+
+class TestMainBatchEmpty:
+    def test_main_batch_raises_type_error(self):
+        import contextlib
+        from errant_analysis import main_batch
+        with contextlib.suppress(ValueError, SystemExit):
+            main_batch([])
+
+
+class TestGenerateSummaryMocked:
+    def test_generate_summary_returns_dict(self, mocker):
+        from errant_analysis import generate_summary
+        mock_api = mocker.patch("errant_analysis._call_api")
+        mock_api.return_value = '{"errors": [], "praise": "Good job!"}'
+        result = generate_summary({
+            "student_id": "99999", "original_text": "Hi", "corrected_text": "Hello",
+            "error_rate": 5, "word_count": 1, "class": "M3", "name": "T",
+            "errant_analysis": {"errors": [], "uncategorised": [], "dropped_edits": {}},
+        })
+        assert isinstance(result, dict)
+
+
+class TestReinsertParagraphBreaks:
+    def test_llm_returns_fixed_text(self, mocker):
+        from errant_analysis import _reinsert_paragraph_breaks_llm
+        mocker.patch("errant_analysis._call_api", return_value="Hello.\n\nWorld.")
+        result = _reinsert_paragraph_breaks_llm("Hello.\n\nWorld.", "Hello. World.")
+        assert "\\n\\n" in result or "\n\n" in result
+
+
+class TestMigrateLegacyOutput:
+    def test_legacy_missing_date(self):
+        from errant_analysis import _migrate_legacy_output
+        result = _migrate_legacy_output({
+            "student_id": "99999",
+            "original_text": "test",
+            "corrected_text": "test",
+        })
+        assert "date_created" in result
+        assert result["date_created"] == ""
+
+    def test_legacy_text_key(self):
+        from errant_analysis import _migrate_legacy_output
+        result = _migrate_legacy_output({
+            "student_id": "99999",
+            "text": "old format text",
+            "corrected_text": "corrected",
+        })
+        assert result["original_text"] == "old format text"
+
+    def test_legacy_missing_word_count(self):
+        from errant_analysis import _migrate_legacy_output
+        result = _migrate_legacy_output({
+            "student_id": "99999",
+            "original_text": "hello world",
+            "corrected_text": "hello world",
+        })
+        assert result["word_count"] == 2

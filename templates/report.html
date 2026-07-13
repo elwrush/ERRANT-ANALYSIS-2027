@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page { size: A4; margin: 1.5cm; }
+@media print {
+  .page-break { page-break-after: always; }
+}
+body {
+  font-family: Roboto, sans-serif;
+  font-size: 14pt;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0;
+  color: #000;
+}
+.masthead {
+  display: grid;
+  grid-template-columns: 0.8fr 2fr 1.2fr;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 0.5em;
+}
+.masthead-left { text-align: left; }
+.masthead-left img { height: 1.56cm; }
+.masthead-center { font-size: 18pt; font-weight: bold; }
+.masthead-right { text-align: right; }
+.masthead-right img { height: 2.2cm; }
+.separator { border: none; border-top: 1pt solid #000; margin: 0.5em 0; }
+.center { text-align: center; }
+.title { font-size: 16pt; font-weight: bold; margin: 0.5em 0; }
+.subtitle { font-size: 12pt; margin: 0.5em 0; }
+.section-title { font-size: 16pt; font-weight: bold; margin: 1em 0 0.5em; }
+.section-desc { font-size: 12pt; margin: 0.5em 0; }
+.chart { text-align: center; margin: 0.5em 0; }
+.chart img { width: 80%; max-width: 80%; }
+.chart-note { font-size: 12pt; margin: 0.5em 0; }
+.chart-target { font-size: 12pt; margin: 0.5em 0; }
+.summary-text { font-size: 12pt; margin: 0.5em 0; line-height: 1.5; }
+.summary-error { font-size: 12pt; margin: 0.3em 0; }
+.correction-text { font-size: 14pt; margin: 0.5em 0; line-height: 1.6; }
+.original-text { font-size: 14pt; margin: 0.5em 0; line-height: 1.6; }
+.signature { font-size: 12pt; margin-top: 2em; }
+.vspace { margin: 0.5em 0; }
+.vspace-large { margin: 1em 0; }
+u { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="masthead-left"><img src="{{ header_logo_left }}" alt="ACT"></div>
+  <div class="masthead-center">Mathayom Program</div>
+  <div class="masthead-right"><img src="{{ header_logo_right }}" alt="Cambridge"></div>
+</div>
+<hr class="separator">
+
+<div class="vspace-large"></div>
+
+<div class="center title">Writing Accuracy Feedback Report</div>
+<div class="center subtitle">{{ name }} &mdash; {{ student_id }} &mdash; {{ class_label }}</div>
+
+<div class="vspace-large"></div>
+
+<p><strong>Dear {{ name }},</strong></p>
+
+{% if summary_praise %}
+<div class="vspace"></div>
+<div class="summary-text">{{ summary_praise }}</div>
+<div class="vspace"></div>
+{% endif %}
+
+{% if summary_errors %}
+<div class="summary-text">
+{% for err in summary_errors %}
+<div class="summary-error">&bull; <strong>{{ err.name }}:</strong> {{ err.explanation }}</div>
+{% endfor %}
+</div>
+{% endif %}
+
+<div class="vspace-large"></div>
+
+<div class="chart-target">
+The solid line in the chart below shows the {{ cefr_level }} target error rate ({{ target_rate }}%). Your goal is to keep your error rate below this line. The chart tracks your progress over time.
+</div>
+
+<div class="chart">
+<img src="{{ chart_path }}" alt="Error rate chart">
+</div>
+
+{% if word_count < 40 %}
+<div class="vspace"></div>
+<div class="chart-note">Your writing was too short to give you error rate feedback. Please write at least 40 words to get a feedback score. (You wrote {{ word_count }} words.)</div>
+{% endif %}
+
+<div class="vspace-large"></div>
+<div class="vspace"></div>
+
+<div class="section-title">Your Writing with Corrections</div>
+<div class="section-desc">I scanned your writing for errors and underlined the corrections below. Carefully comparing the corrected and original versions will help you become more aware of common mistakes and improve your writing skills.</div>
+
+<div class="vspace"></div>
+
+<div class="correction-text">{{ corrected_markup }}</div>
+
+<div class="vspace-large"></div>
+
+<div class="section-title">Your Original Writing (Uncorrected)</div>
+<div class="section-desc">Below is your original writing exactly as you submitted it, before any corrections were applied. Compare it with the corrected version above.</div>
+
+<div class="vspace"></div>
+
+<div class="original-text">{{ original_text }}</div>
+
+<div class="vspace-large"></div>
+
+<div class="signature">{{ today }}</div>
+<div class="signature">Sincerely,</div>
+<div class="signature"><strong>Teacher Ed</strong></div>
+
+</body>
+</html>

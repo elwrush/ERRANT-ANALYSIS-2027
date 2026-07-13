@@ -15,6 +15,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from _retry import RetryableError, retry
+from models import IngestionOutput
 
 load_dotenv()
 
@@ -258,6 +259,7 @@ def call_openrouter(data_url):
     }
     payload = {
         "model": MODEL,
+        "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -424,12 +426,14 @@ def process_student_group(group, folder_name):
         "source_images": [p.name for p in page_paths],
     }
 
+    validated = IngestionOutput.model_validate(output)
+
     out_dir = OUTPUTS_DIR / folder_name
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{final_id}.json"
 
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, indent=2, ensure_ascii=False)
+        json.dump(validated.model_dump(by_alias=True), f, indent=2, ensure_ascii=False)
 
     print(f"    Saved to {out_path}")
     return {"student_id": final_id, "pages": len(page_paths), "text_len": len(combined_text)}

@@ -6,12 +6,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
+from config import LOCAL_WORKING_DIR
+
 load_dotenv()
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_ESL_KEY")
 
-LOCAL_WORKING_DIR = Path("local-working")
 TABLE_NAME = "classlists"
 
 

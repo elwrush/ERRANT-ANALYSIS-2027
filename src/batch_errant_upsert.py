@@ -7,23 +7,21 @@ runs correction + ERRANT annotation, upserts error counts back.
 import os
 import sys
 import json
-import re
-import time
 from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client
 from tqdm import tqdm
 
-load_dotenv()
-
+from config import ERRANT_CODE_TO_COLUMN, ERROR_CODE_COLUMNS
+from models import ErrantOutput
 from errant_analysis import (
     correct_text,
     classify_edits,
     pre_split_edits,
     is_fluency_rewrite,
-    ERRANT_CODE_TO_COLUMN,
-    ERROR_CODE_COLUMNS,
 )
+
+load_dotenv()
 
 
 def process_one_record(student_text, word_count, nlp, annotator, max_attempts=3):
@@ -41,7 +39,7 @@ def process_one_record(student_text, word_count, nlp, annotator, max_attempts=3)
         corrected = corrected.strip()
         
         if orig_text == corrected:
-            return 0, {col: 0 for col in ERROR_CODE_COLUMNS}
+            return 0, dict.fromkeys(ERROR_CODE_COLUMNS, 0)
         
         # Quick pre-check: estimate error count from ERRANT to check for fluency rewrite
         orig_parse = annotator.parse(orig_text)
@@ -57,7 +55,7 @@ def process_one_record(student_text, word_count, nlp, annotator, max_attempts=3)
             print(f"  Fluency rewrite detected (attempt {attempt + 1}), retrying...")
     
     # Full ERRANT annotation on the final (good or best-available) result
-    counts = {col: 0 for col in ERROR_CODE_COLUMNS}
+    counts = dict.fromkeys(ERROR_CODE_COLUMNS, 0)
     orig_parse = annotator.parse(orig_text)
     cor_parse = annotator.parse(corrected)
     edits = annotator.annotate(orig_parse, cor_parse)
@@ -180,6 +178,16 @@ def main():
                         "error_percent": error_rate,
                     }
                     row.update(counts)
+                    ErrantOutput(
+                        student_id=rec["student_id"],
+                        original_text=rec["student_text"][:10] or " ",
+                        corrected_text=rec["student_text"][:10] or " ",
+                        word_count=rec["word_count"],
+                        error_rate=error_rate,
+                        date_created="",
+                    )
+                    if error_rate is not None:
+                        assert 0 <= error_rate <= 100, f"error_rate {error_rate} out of range"
                     results.append(row)
                 else:
                     tqdm.write(f"  SKIPPED (empty text): {rec['student_id']}/{rec['date']}")
@@ -196,7 +204,7 @@ def main():
         return
 
     # Fetch existing error_reports rows to supply NOT NULL columns for upsert
-    print(f"Fetching existing error_reports data...")
+    print("Fetching existing error_reports data...")
     all_existing = client.table("error_reports").select("*").execute().data
     existing_map = {(str(r["student_id"]), str(r["date"])): r for r in all_existing}
 
@@ -234,7 +242,7 @@ def main():
 
     if total_upserted == len(full_rows) and CHECKPOINT_FILE.exists():
         CHECKPOINT_FILE.unlink()
-        print(f"  Checkpoint file removed (all upserts completed).")
+        print("  Checkpoint file removed (all upserts completed).")
 
     # 5. Report
     print("\n=== FINAL REPORT ===")

@@ -4,37 +4,31 @@ import re
 import sys
 import json
 from datetime import date
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from dotenv import load_dotenv
 from openai import OpenAI, RateLimitError, APIConnectionError, APITimeoutError, InternalServerError, AuthenticationError, BadRequestError
 from _retry import RetryableError, NonRetryableError, retry
+from config import (
+    CORRECTION_MODEL, SUMMARY_MODEL, OUTPUTS_DIR, LOCAL_WORKING_DIR,
+    CORRECTION_TEMPERATURE, SUMMARY_TEMPERATURE,
+    MAX_RETRIES, REQUEST_TIMEOUT, MULTI_TOKEN_THRESHOLD,
+    MAX_WORKERS, MAX_OUTPUT_TOKENS, get_api_key,
+    ERRANT_CODE_NAMES, ERRANT_CODE_TO_COLUMN, ERROR_CODE_COLUMNS,
+)
 from generate_report import esc
+from models import ErrantOutput
 import spacy
 import errant
 from rapidfuzz.distance import Levenshtein
 
 load_dotenv(override=True)
 
-API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-
-CORRECTION_MODEL = "deepseek-v4-flash"
-SUMMARY_MODEL = "deepseek-v4-flash"
+API_KEY = get_api_key("DEEPSEEK_API_KEY")
 
 # Single DeepSeek client for both correction and summary
 _client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com", max_retries=0)
 
-OUTPUTS_DIR = Path("outputs")
-LOCAL_WORKING_DIR = Path("local-working")
-TEMPERATURE = 0.6
-
-MAX_RETRIES = 3
-REQUEST_TIMEOUT = 120
-MULTI_TOKEN_THRESHOLD = 3
-SUMMARY_TEMPERATURE = 0.8
-MAX_WORKERS = 5
-MAX_OUTPUT_TOKENS = 4096
 MISSING_STUDENT_IDS: dict[str, list[str]] = {}
 
 # Whole-text correction prompt — minimal edits: fix errors, don't rewrite
@@ -81,7 +75,7 @@ def show_menu(files):
         print(f"Invalid choice. Enter a number 1-{len(files)}.")
 
 
-def call_model(text, temperature=TEMPERATURE):
+def call_model(text, temperature=CORRECTION_TEMPERATURE):
     return _call_api(CORRECTION_PROMPT.format(text=text), temperature)
 
 
@@ -132,9 +126,7 @@ def is_fluency_rewrite(original, corrected, word_count, total_errors):
         return True
     orig_sentences = len(re.split(r'[.!?]+', original))
     corr_sentences = len(re.split(r'[.!?]+', corrected))
-    if orig_sentences > 0 and corr_sentences / orig_sentences > 2.0:
-        return True
-    return False
+    return orig_sentences > 0 and corr_sentences / orig_sentences > 2.0
 
 
 def correct_text(original_text, nlp_model):
@@ -143,7 +135,7 @@ def correct_text(original_text, nlp_model):
     Returns (corrected_full_text, [], [])."""
     tqdm.write(f"  Correcting full text ({len(original_text)} chars)...")
     
-    raw = _call_api(CORRECTION_PROMPT.format(text=original_text), TEMPERATURE)
+    raw = _call_api(CORRECTION_PROMPT.format(text=original_text), CORRECTION_TEMPERATURE)
     if not raw:
         tqdm.write("  No correction received, using original text")
         return original_text, [], []
@@ -168,13 +160,13 @@ def correct_text(original_text, nlp_model):
     return corrected, [], []
 
 
-def call_model_custom(prompt_content, temperature=TEMPERATURE, model=None):
+def call_model_custom(prompt_content, temperature=CORRECTION_TEMPERATURE, model=None):
     """Call DeepSeek for correction. Thinking disabled so temperature is respected."""
     return _call_api(prompt_content, temperature, model=model)
 
 
 @retry(max_retries=MAX_RETRIES)
-def _call_api(content, temperature, model=None, *, disable_thinking=True):
+def _call_api(content, temperature, model=None, *, disable_thinking=True, response_format=None):
     """Call the DeepSeek API. By default disables thinking mode so temperature is respected.
     Set disable_thinking=False for correction where model reasoning improves quality."""
     if not API_KEY:
@@ -199,6 +191,10 @@ def _call_api(content, temperature, model=None, *, disable_thinking=True):
         # We must explicitly disable thinking to use temperature for control.
         if disable_thinking:
             kwargs["extra_body"]["thinking"] = {"type": "disabled"}
+        if response_format is None:
+            kwargs["response_format"] = {"type": "json_object"}
+        else:
+            kwargs["response_format"] = response_format
         r = _client.chat.completions.create(**kwargs)
         result = r.choices[0].message.content
         if result:
@@ -219,81 +215,7 @@ def _call_api(content, temperature, model=None, *, disable_thinking=True):
         raise NonRetryableError(str(e))
 
 
-ERRANT_CODE_NAMES = {
-    # Noun errors
-    "R:NOUN": "Problems with nouns",
-    "R:NOUN:NUM": "Problems with singular and plural nouns",
-    "R:NOUN:POSS": "Problems with possessive nouns",
-    "R:NOUN:INFL": "Problems with noun inflection",
-    # Verb errors
-    "R:VERB": "Problems with verbs",
-    "R:VERB:TENSE": "Problems with verb tense",
-    "R:VERB:SVA": "Problems with subject-verb agreement",
-    "R:VERB:FORM": "Problems with verb form (gerunds and infinitives)",
-    "R:VERB:INFL": "Problems with verb inflection",
-    # Adjective errors
-    "R:ADJ": "Problems with adjectives",
-    "R:ADJ:FORM": "Problems with adjective form (comparatives and superlatives)",
-    # Other POS errors
-    "R:ADV": "Problems with adverbs",
-    "R:PREP": "Problems with prepositions",
-    "R:PRON": "Problems with pronouns",
-    "R:DET": "Problems with determiners (articles: a, an, the)",
-    "R:CONJ": "Problems with conjunctions",
-    "R:PART": "Problems with particles",
-    "R:PUNCT": "Problems with punctuation",
-    # Spelling and orthography
-    "R:SPELL": "Spelling or capitalisation mistakes",
-    "R:ORTH": "Capitalisation and spacing errors",
-    "R:MORPH": "Problems with word formation (prefixes and suffixes)",
-    # Structure
-    "R:WO": "Problems with word order",
-    "R:CONTR": "Problems with contractions",
-    # Missing / Unnecessary error codes
-    "M:NOUN": "Missing noun",
-    "M:NOUN:NUM": "Missing plural noun ending",
-    "M:VERB": "Missing verb",
-    "M:VERB:TENSE": "Missing auxiliary verb",
-    "M:VERB:FORM": "Missing verb form",
-    "M:PREP": "Missing preposition",
-    "M:PRON": "Missing pronoun",
-    "M:DET": "Missing determiner (a, an, the)",
-    "M:CONJ": "Missing conjunction",
-    "M:PART": "Missing particle",
-    "M:PUNCT": "Missing punctuation",
-    "U:NOUN": "Unnecessary noun",
-    "U:VERB": "Unnecessary verb",
-    "U:PREP": "Unnecessary preposition",
-    "U:PRON": "Unnecessary pronoun",
-    "U:DET": "Unnecessary determiner",
-    "U:CONJ": "Unnecessary conjunction",
-    "U:PART": "Unnecessary particle",
-    "U:PUNCT": "Unnecessary punctuation",
-    # Generic fallback
-    "OTHER": "Other errors",
-    "UNK": "Unidentified error type",
-}
 
-
-ERRANT_CODE_TO_COLUMN = {
-    "R:NOUN": "r_noun", "R:NOUN:NUM": "r_noun_num", "R:NOUN:POSS": "r_noun_poss", "R:NOUN:INFL": "r_noun_infl",
-    "R:VERB": "r_verb", "R:VERB:TENSE": "r_verb_tense", "R:VERB:SVA": "r_verb_sva",
-    "R:VERB:FORM": "r_verb_form", "R:VERB:INFL": "r_verb_infl",
-    "R:ADJ": "r_adj", "R:ADJ:FORM": "r_adj_form",
-    "R:ADV": "r_adv", "R:PREP": "r_prep", "R:PRON": "r_pron", "R:DET": "r_det",
-    "R:CONJ": "r_conj", "R:PART": "r_part", "R:PUNCT": "r_punct",
-    "R:SPELL": "r_spell", "R:ORTH": "r_orth", "R:MORPH": "r_morph",
-    "R:WO": "r_wo", "R:CONTR": "r_contr",
-    "M:NOUN": "m_noun", "M:NOUN:NUM": "m_noun_num",
-    "M:VERB": "m_verb", "M:VERB:TENSE": "m_verb_tense", "M:VERB:FORM": "m_verb_form",
-    "M:PREP": "m_prep", "M:PRON": "m_pron", "M:DET": "m_det",
-    "M:CONJ": "m_conj", "M:PART": "m_part", "M:PUNCT": "m_punct",
-    "U:NOUN": "u_noun", "U:VERB": "u_verb", "U:PREP": "u_prep", "U:PRON": "u_pron",
-    "U:DET": "u_det", "U:CONJ": "u_conj", "U:PART": "u_part", "U:PUNCT": "u_punct",
-    "OTHER": "other", "UNK": "unk",
-}
-
-ERROR_CODE_COLUMNS = list(ERRANT_CODE_TO_COLUMN.values())
 
 
 def human_error_type(err_type):
@@ -1090,15 +1012,39 @@ def _finalize_output(output, file_path):
     return output
 
 
+def _migrate_legacy_output(output):
+    migrated = dict(output)
+    migrated.setdefault("date_created", "")
+    migrated.setdefault("corrected_text", migrated.get("original_text", ""))
+    migrated.setdefault("word_count", len(migrated.get("original_text", "").split()))
+    migrated.setdefault("error_rate", None)
+    migrated.setdefault("sentence_pairs", [])
+    migrated.setdefault("errant_analysis", {"errors": [], "uncategorised": [], "dropped_edits": {}})
+    migrated.setdefault("metadata", {
+        "model": "legacy", "identity_check": False, "overcorrection_count": 0,
+        "overcorrection_warnings": [], "total_edit_count": 0, "edit_width_stats": {},
+    })
+    if "text" in migrated and "original_text" not in migrated:
+        migrated["original_text"] = migrated.pop("text")
+    if "student_text" in migrated and "original_text" not in migrated:
+        migrated["original_text"] = migrated.pop("student_text")
+    if migrated.get("original_text") != migrated.get("corrected_text") and migrated.get("corrected_text") == migrated.get("original_text", "") == "":
+        migrated["corrected_text"] = migrated["original_text"]
+    return migrated
+
+
 def write_output(output, file_path):
+    migrated = _migrate_legacy_output(output)
+    validated = ErrantOutput.model_validate(migrated)
+
     folder_name = file_path.parent.name
-    record_id = output.get("record_id") or output.get("student_id", "unknown")
+    record_id = validated.record_id or validated.student_id
     output_filename = f"{folder_name}-{record_id}.json"
     output_path = LOCAL_WORKING_DIR / output_filename
 
     LOCAL_WORKING_DIR.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, indent=2, ensure_ascii=False)
+        json.dump(validated.model_dump(by_alias=True), f, indent=2, ensure_ascii=False)
 
     tqdm.write(f"  Saved to: {output_path}")
     tc = sum(e["count"] for e in output["errant_analysis"]["errors"])

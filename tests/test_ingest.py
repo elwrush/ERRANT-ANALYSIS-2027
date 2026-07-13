@@ -96,3 +96,112 @@ class TestGrouping:
         (tmp_path / "readme.txt").write_text("hello")
         groups = group_images(tmp_path, 1)
         assert groups == []
+
+
+class TestResponseFormat:
+    def test_openrouter_payload_has_response_format(self, mocker):
+        mock_post = mocker.patch("requests.post")
+        mock_response = mocker.Mock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": '{"student_id": "12345", "student_text": "hello"}'}}]
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        from ingest import call_openrouter
+        call_openrouter("data:image/jpeg;base64,aa")
+
+        call_kwargs = mock_post.call_args_list[0][1] if mock_post.call_args_list else {}
+        payload = call_kwargs.get("json", {})
+        assert "response_format" in payload, "response_format not in payload"
+        assert payload["response_format"] == {"type": "json_object"}, f"wrong response_format: {payload['response_format']}"
+
+
+class TestIngestionOutputValidation:
+    def test_rejects_non_5_digit_id(self):
+        from models import IngestionOutput
+        import pytest
+        with pytest.raises(ValueError, match="student_id must be 5 digits"):
+            IngestionOutput.model_validate({
+                "student_id": "1234",
+                "student_text": "hello",
+                "word_count": 1,
+            })
+
+    def test_rejects_empty_text(self):
+        from models import IngestionOutput
+        import pytest
+        with pytest.raises(ValueError, match="student_text must not be empty"):
+            IngestionOutput.model_validate({
+                "student_id": "12345",
+                "student_text": "",
+                "word_count": 1,
+            })
+
+    def test_accepts_valid_input(self):
+        from models import IngestionOutput
+        result = IngestionOutput.model_validate({
+            "student_id": "12345",
+            "student_text": "hello world",
+            "word_count": 2,
+        })
+        assert result.student_id == "12345"
+        assert result.word_count == 2
+
+
+class TestHeuristicExtractName:
+    def test_my_name_is(self):
+        from ingest import heuristic_extract_name
+        assert heuristic_extract_name("My name is John") == "John"
+
+    def test_i_am(self):
+        from ingest import heuristic_extract_name
+        assert heuristic_extract_name("I am Sarah") == "Sarah"
+
+    def test_no_match(self):
+        from ingest import heuristic_extract_name
+        assert heuristic_extract_name("Hello world") == ""
+
+    def test_case_insensitive(self):
+        from ingest import heuristic_extract_name
+        assert heuristic_extract_name("MY NAME IS TOM") == "Tom"
+
+    def test_short_name(self):
+        from ingest import heuristic_extract_name
+        assert heuristic_extract_name("I am A") == ""
+
+
+class TestTryParseJson:
+    def test_direct(self):
+        from ingest import try_parse_json
+        assert try_parse_json('{"a": 1}') == {"a": 1}
+
+    def test_with_code_fence(self):
+        from ingest import try_parse_json
+        result = try_parse_json('```json\n{"a": 1}\n```')
+        assert result == {"a": 1}
+
+    def test_embedded(self):
+        from ingest import try_parse_json
+        result = try_parse_json('Text before {"a": 1} text after')
+        assert result == {"a": 1}
+
+    def test_malformed(self):
+        from ingest import try_parse_json
+        assert try_parse_json("not json") is None
+
+
+class TestCallOpenrouterMocked:
+    def test_returns_valid_json(self, mocker):
+        mock_post = mocker.patch("requests.post")
+        mock_response = mocker.Mock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": '{"student_id": "12345", "student_text": "Hello"}'}}]
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        from ingest import call_openrouter
+        result = call_openrouter("data:image/jpeg;base64,aa")
+        assert result is not None
+        assert result["student_id"] == "12345"
