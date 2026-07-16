@@ -1,69 +1,72 @@
 # AGENTS.md — ERRANT-ANALYSIS
 
-Pipeline: OCR transcription (Gemini 2.5 Flash via OpenRouter) → grammatical error correction (DeepSeek V4 Flash) + ERRANT annotation → Supabase upsert → Jinja2+Playwright PDF reports.
-
-## Stack
-
-| Tool | Version / Config |
-|------|------------------|
-| Python | 3.14 |
-| Linter | `ruff check src/ tests/` (config: `.ruff.toml`) |
-| Tests | `pytest tests/ -v` (no coverage flag needed unless checking) |
-| Coverage | `pytest --cov=src --cov-report=term` |
-| PDF engine | **Playwright** (`pip install playwright && playwright install chromium`) — no Typst |
-| Validation | `response_format` on all LLM calls; `model_validate()` before all JSON writes |
-| Error codes | Canonical in `src/config.py` — all 43 ERRANT codes mapped to Supabase column names |
+Pipeline: Supabase `error_reports` table → `technical_report_writer.py` (Jinja2 → Playwright) → A4 PDF report.
 
 ## Commands
 
 ```bash
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
 ruff check src/ tests/
-python -m pytest tests/ -v
+pytest tests/ -v
+python src/technical_report_writer.py render <draft.md> <output.pdf>
+python src/generate_report.py <folder>     # generates per-student PDFs in PDF/<folder>/
 ```
 
-## Pipeline stages
+## Key scripts & data flow
 
-| Stage | Script | Input | Output |
-|-------|--------|-------|--------|
-| Ingestion | `src/ingest.py` | `inputs/{folder}/*.jpg` | `outputs/{folder}/{id}.json` |
-| ERRANT | `src/errant_analysis.py` | Ingestion JSONs | `local-working/{folder}-{id}.json` |
-| Batch upsert | `src/batch_errant_upsert.py` | `error_reports` rows (NULL error_percent) | Supabase upsert |
-| Rename | `src/rename_json_files.py` | `local-working/` JSONs | `local-working/{id}.json` |
-| Report | `src/generate_report.py` | Renamed JSONs | `PDF/{class}/` PDFs via Playwright |
+| Script | What it does | Input | Output |
+|--------|-------------|-------|--------|
+| `src/technical_report_writer.py` | Main report PDF from Markdown draft + `local-working/` JSONs | Draft `.md` + `local-working/*.json` | Technical assessment PDF |
+| `src/generate_report.py` | Per-student feedback report PDFs | `local-working/*.json` + Supabase `error_reports` historical data | `PDF/{class}/` PDF files |
+| `src/errant_analysis.py` | Run ERRANT on transcribed JSONs | Ingestion JSONs | `local-working/` JSONs with `errant_analysis` field |
+| `src/batch_errant_upsert.py` | Load pipeline results into Supabase | `local-working/` JSONs | Upserts to `error_reports` table |
+| `src/config.py` | Shared constants: `B1_TARGET=19`, `B2_TARGET=15`, ERRANT code names, API keys | — | — |
 
-Stage gates: preflight check (`src/preflight_check.py`) → ID sign-off (human) → proceed.
+## Critical rules
+
+1. **Two-pass architecture**: grading pass (`technical_report_writer.py`, examiner prose) → student feedback (`generate_report.py`, warm HTML/underlines). Never merge.
+2. **Student report benchmarks**: The benchmark lines in student PDFs use `B1_TARGET=19` and `B2_TARGET=15` from `config.py`. These are NOT CEFR-mandated — they are based on Štulrajterová (2023) observed rates.
+3. **`generate_report.py` chart fix**: Use `chart_path.as_uri()` for Playwright `set_content()` — bare POSIX paths won't load. Base64 data URIs also work.
+4. **`technical_report_writer.py` footer**: `footer_template` (snake_case) not `footerTemplate`.
+5. **Playwright page number footer**: `display_header_footer=True` with `footer_template='<span class="pageNumber"></span>'`.
+
+## Historical data for charts
+
+`fetch_historical_data()` in `generate_report.py` queries Supabase `error_reports` first, falls back to `local-working/historical_data.json`. Create this file via `supabase db query --linked "SELECT student_id, date, error_percent FROM error_reports WHERE error_percent IS NOT NULL ORDER BY student_id, date;"`.
+
+## Data sources
+
+- **`local-working/`**: Pipeline-run JSONs (latest batch, ~30-100 students). Used for findings tables, error type distribution, cohort means.
+- **`error_reports` table (Supabase)**: Full historical data (1,006 records, 160 students, 52 dates across 2025-2027). Used for historical charts and longitudinal tracking.
+- **References in `references/`**: Annotated PDFs at `references/annotated/`. Citation map at `references/citation-map.md`.
+
+## CEFR benchmarks (empirical, not aspirational)
+
+| Level | Observed error rate | Source |
+|-------|-------------------|--------|
+| B1 | ~19% | Štulrajterová (2023), Ch. 4, p. 78 |
+| B2 | ~15% | Štulrajterová (2023), Ch. 5, pp. 90, 103, 110 |
+
+These are MEAN OBSERVED rates from a Czech EFL learner corpus — not CEFR-published targets.
+
+## Reference formatting
+
+References use APA 7th edition with a `formatted` field in the draft JSON. The template renders `{{ ref.formatted | safe }}` (HTML allowed for `<em>`, `&amp;`). DOIs appear as plain text, not hyperlinks.
+
+## PDF merging
+
+When appending student reports (Appendix 2), the merge script:
+1. Renders main report (11 pages without appendix)
+2. Finds `"Appendix 2: Sample student feedback"` text in the PDF
+3. Inserts the student PDF pages after that page
+4. Saves to temp file, replaces original (PyMuPDF cannot `save()` to the same path)
 
 ## Key files
 
-- `src/config.py` — all shared constants, paths, model names, error code mappings
-- `src/models.py` — Pydantic models: `IngestionOutput`, `ErrantOutput`, `ReportData`
-- `templates/report.html` — Jinja2 template for PDF reports
-- `scripts/archive/` — one-shot/exploratory scripts moved out of `src/`
-
-## Archived scripts (NOT in src/)
-
-`pilot_prep.py`, `query_class_mapping.py`, `query_skill_count.py`, `write_historical_data.py`, `test_models.py`, `add_word_count.py` — all moved to `scripts/archive/`.
-
-## Env vars
-
-`DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY` required. `SUPABASE_URL` + `SUPABASE_ESL_KEY` for Supabase operations.
-
-## CEFR mapping
-
-`_infer_cefr_level()` in `generate_report.py`: M3+ → B2 (target 7%), else → B1 (target 12%). The `class` field in output JSONs uses enrollment status (M2=active, M3=left) not academic level.
-
-## Test files
-
-| File | What it covers |
-|------|---------------|
-| `test_config.py` | Config paths, error code mapping completeness |
-| `test_models.py` | All 3 Pydantic models with valid/invalid/edge data |
-| `test_ingest.py` | JSON parsing, image preprocessing, response_format, IngestionOutput validation |
-| `test_errant.py` | ERRANT detection, classification, align_sentences, metadata, response_format, ErrantOutput validation |
-| `test_report.py` | Jinja2 template rendering, chart generation, historical data, CEFR inference |
-| `test_retry.py` | Retry decorator (RetryableError, NonRetryableError, max_retries) |
-| `test_dependency_graph.py` | Module import depth, circular dependency check |
-| `test_rename_json_files.py` | Student ID extraction, Supabase lookup, renaming |
-| `test_smoke.py` | Import + public function check for all remaining modules |
+| File | Purpose |
+|------|---------|
+| `templates/tech_report.html` | Main report Jinja2 template (sections, tables, inline SVG charts) |
+| `templates/report.html` | Individual student feedback report template |
+| `outputs/drafts/` | Markdown drafts with reference JSON data parsed into `context.references` |
+| `outputs/charts/` | Per-student error rate tracking charts (intermediate PNG, inlined as SVG in main report) |
+| `PDF/` | Generated per-student feedback report PDFs by class |
+| `images/ACT.png` , `images/cambridge.png` | Masthead logos (embedded as base64 in reports) |

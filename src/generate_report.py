@@ -286,6 +286,7 @@ def render_report(student: dict, template_path: Path, output_path: Path) -> Path
 
     project_root = Path(__file__).resolve().parent.parent
     chart_path = project_root / "outputs" / "charts" / f"{student['student_id']}.png"
+    chart_path = chart_path.resolve()
 
     html = tmpl.render(
         student_id=student["student_id"],
@@ -295,14 +296,14 @@ def render_report(student: dict, template_path: Path, output_path: Path) -> Path
         error_rate=student.get("error_rate"),
         cefr_level=level,
         target_rate=target,
-        chart_path=chart_path.as_posix(),
+        chart_path=chart_path.as_uri(),
         summary_praise=summary_data.get("praise", "") if summary_data else "",
         summary_errors=summary_errors,
         corrected_markup=corrected_markup,
         original_text=student.get("original_text", ""),
         today=date.today().strftime("%B %d, %Y"),
-        header_logo_left=(project_root / "images" / "ACT.png").as_posix(),
-        header_logo_right=(project_root / "images" / "cambridge.png").as_posix(),
+        header_logo_left=Path("images/ACT.png").resolve().as_uri(),
+        header_logo_right=Path("images/cambridge.png").resolve().as_uri(),
     )
     return html_to_pdf(html, output_path)
 

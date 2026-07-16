@@ -70,7 +70,7 @@ class ErrantOutput(BaseModel):
     word_count: int = 0
     name: str = ""
     class_: str = Field(default="", alias="class")
-    record_id: str = ""
+    record_id: str | None = None
     submission_date: str = ""
     topic: str = ""
     summary: str = ""

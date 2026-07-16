@@ -1,0 +1,61 @@
+Project: Writing Technical reports
+
+Occasionally I will need to develop technical reports which provide a snapshot of large-scale errant analysis.
+
+We need to set up a technical report writer which conforms to the standards contained in "C:\PROJECTS\COMMON\python-orchestrator-advice.md" and is triggered by the project level kilo cli command /write-technical report
+
+This should take us interactively through the report-writing process. The user should be asked:
+
+1. where the data are
+2. what the title of the report should be
+3. if there are any additional sectons to those that are identified in the baseline report (the user should be reminded what those sections are. The user can specify where the new section should be inserted. It MUST be written in the format of a rhetorical question that is answered by the data.
+
+Authorial voice
+The report should be written in the authorial voice of a teacher explaining the lexicao-grammatical findings of the analysis. Language should be active and bullet points should be used where appropriate. The use of charts and graphs is highly preferred where this will serve to illustrate the data.
+
+Phrasing and punctuation (e.g. em dashes) associated with "AI slop" should be avoided. The agent must use the tavily search skill to copile a list of rhertoical rules before writing. The writer should take on the persona of an educated Australian (do NOT use Australianisms such as "mate").
+
+Report format
+The report will be written using jinja2-playwright. Do NOT use the extant pandoc-typst format. 
+Find a highly regarded playwright business report template and adapt it. We need to use the document header found in "C:\PROJECTS\WRITING_ASSESSMENT_NEW". The report will be printed on a grayscale printer, so diagrams and illustrations MUST use data that are easily discernible in grayscale format. crosshatching and ptterns are to be preferred, if available.
+
+Report sections
+Introduction
+A brief overview of the main findings of the report and its main fdings. No more than 2 pars. Use badges and chrts if apropriate
+
+What are the most important findings?
+Answer this question in more detail. use charts andillustation to provide support
+
+Hw was the reort compiled?
+Description of how many students' writing was analysed, which cohorts, (brefly) the tools that were used.
+
+What does this report say about our students' proficiency?
+A few paras which nenchmark the students against interantionals tndards. must be closely referenced. 
+
+How can teachers use this report?
+How can the findings be applied in the classroom? We are an ESL center whose main purpose is to develop middle-scholers' capacity to achieve at least a  B1 stanard in the Cambridge for Schools English exams (PET for Schols, First for Schools etc). Te advice shouldbe practical, referenced, and clearly linked to the report findings
+
+What is involved in an Errant Analysis?
+Detailed explanation of what Erant analysis is, and what its codes mean. Provie examples so teachers would know how to read raw errant output.
+
+What are the liitations of Errant Analysis?
+Referenced discussion 
+
+Future directions ...
+Resttae the main points in the report. Indicate scope fir future research/analysis/pedagogy
+
+Appendix: Data in detail
+Tables which provide a full overview of errors compiled in this analysis, how the eerrors can be read, and examples atkenfrom analysis
+
+Technical details
+Provide a fine-grained analysis of how the analysis was conducted. A technically-minded person whoulc be able to build a parallel application using this guidance
+
+Refeences
+Reference list written in APA 7th edition style
+
+Linting requirements.
+Hallucination is a major issue when compiling complex reports of this nature.
+Red0-green testing must e used: "C:\PROJECTS\COMMON\red-green.md"
+When sourcing reference data, the agent must highlight passages in the source PDFs or other material
+All referenced sources must contain page or para numbes for easy checking by human
+A first draft MUST be produced in md format. Te human will review and check all sources. when rview is completed, ony then will the agent produce the final pblishable report. 
