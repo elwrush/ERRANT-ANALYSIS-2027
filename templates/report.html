@@ -9,7 +9,7 @@
 }
 body {
   font-family: Roboto, sans-serif;
-  font-size: 14pt;
+  font-size: 12pt;
   line-height: 1.4;
   margin: 0;
   padding: 0;
@@ -23,10 +23,10 @@ body {
   margin-bottom: 0.5em;
 }
 .masthead-left { text-align: left; }
-.masthead-left img { height: 1.56cm; }
+.masthead-left img { height: 2.2cm; }
 .masthead-center { font-size: 18pt; font-weight: bold; }
 .masthead-right { text-align: right; }
-.masthead-right img { height: 2.2cm; }
+.masthead-right img { height: 1.56cm; }
 .separator { border: none; border-top: 1pt solid #000; margin: 0.5em 0; }
 .center { text-align: center; }
 .title { font-size: 16pt; font-weight: bold; margin: 0.5em 0; }
@@ -38,9 +38,10 @@ body {
 .chart-note { font-size: 12pt; margin: 0.5em 0; }
 .chart-target { font-size: 12pt; margin: 0.5em 0; }
 .summary-text { font-size: 12pt; margin: 0.5em 0; line-height: 1.5; }
+.summary-segue { font-size: 12pt; margin: 0.3em 0; font-style: italic; }
 .summary-error { font-size: 12pt; margin: 0.3em 0; }
-.correction-text { font-size: 14pt; margin: 0.5em 0; line-height: 1.6; }
-.original-text { font-size: 14pt; margin: 0.5em 0; line-height: 1.6; }
+.correction-text { font-size: 12pt; margin: 0.5em 0; line-height: 1.6; }
+.original-text { font-size: 12pt; margin: 0.5em 0; line-height: 1.6; }
 .signature { font-size: 12pt; margin-top: 2em; }
 .vspace { margin: 0.5em 0; }
 .vspace-large { margin: 1em 0; }
@@ -50,9 +51,9 @@ u { text-decoration: underline; }
 <body>
 
 <div class="masthead">
-  <div class="masthead-left"><img src="{{ header_logo_left }}" alt="ACT"></div>
-  <div class="masthead-center">Mathayom Program</div>
-  <div class="masthead-right"><img src="{{ header_logo_right }}" alt="Cambridge"></div>
+  <div class="masthead-left"><img src="{{ header_logo_left }}" alt="Cambridge"></div>
+  <div class="masthead-center">C·E·L Mathayom</div>
+  <div class="masthead-right"><img src="{{ header_logo_right }}" alt="ACT"></div>
 </div>
 <hr class="separator">
 
@@ -69,6 +70,10 @@ u { text-decoration: underline; }
 <div class="vspace"></div>
 <div class="summary-text">{{ summary_praise }}</div>
 <div class="vspace"></div>
+{% endif %}
+
+{% if summary_segue %}
+<div class="summary-segue">{{ summary_segue }}</div>
 {% endif %}
 
 {% if summary_errors %}
@@ -94,8 +99,7 @@ The solid line in the chart below shows the {{ cefr_level }} benchmark (~{{ targ
 <div class="chart-note">Your writing was too short to give you error rate feedback. Please write at least 40 words to get a feedback score. (You wrote {{ word_count }} words.)</div>
 {% endif %}
 
-<div class="vspace-large"></div>
-<div class="vspace"></div>
+<div class="page-break"></div>
 
 <div class="section-title">Your Writing with Corrections</div>
 <div class="section-desc">I scanned your writing for errors and underlined the corrections below. Carefully comparing the corrected and original versions will help you become more aware of common mistakes and improve your writing skills.</div>

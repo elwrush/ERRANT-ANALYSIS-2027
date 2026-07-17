@@ -27,8 +27,8 @@ class TestConfigPaths:
         import config
         assert config.CORRECTION_MODEL == "deepseek-v4-flash"
         assert config.INGESTION_MODEL == "google/gemini-2.5-flash"
-        assert config.B1_TARGET == 12
-        assert config.B2_TARGET == 7
+        assert config.B1_TARGET == 15
+        assert config.B2_TARGET == 10
 
     def test_get_api_key_raises_when_missing(self):
         import config

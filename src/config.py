@@ -31,8 +31,8 @@ JPEG_QUALITY = 90
 JITTER_MIN = 0.5
 JITTER_MAX = 2.0
 
-B1_TARGET = 19
-B2_TARGET = 15
+B1_TARGET = 15
+B2_TARGET = 10
 SHORT_TEXT_MSG = "Your writing was too short to give you error rate feedback. Please write at least 40 words to get a feedback score."
 
 

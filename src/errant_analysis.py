@@ -76,7 +76,7 @@ def show_menu(files):
 
 
 def call_model(text, temperature=CORRECTION_TEMPERATURE):
-    return _call_api(CORRECTION_PROMPT.format(text=text), temperature)
+    return _call_api(CORRECTION_PROMPT.format(text=text), temperature, response_format=False)
 
 
 def extract_correction(raw_response):
@@ -135,7 +135,7 @@ def correct_text(original_text, nlp_model):
     Returns (corrected_full_text, [], [])."""
     tqdm.write(f"  Correcting full text ({len(original_text)} chars)...")
     
-    raw = _call_api(CORRECTION_PROMPT.format(text=original_text), CORRECTION_TEMPERATURE)
+    raw = _call_api(CORRECTION_PROMPT.format(text=original_text), CORRECTION_TEMPERATURE, response_format=False)
     if not raw:
         tqdm.write("  No correction received, using original text")
         return original_text, [], []
@@ -193,7 +193,7 @@ def _call_api(content, temperature, model=None, *, disable_thinking=True, respon
             kwargs["extra_body"]["thinking"] = {"type": "disabled"}
         if response_format is None:
             kwargs["response_format"] = {"type": "json_object"}
-        else:
+        elif response_format is not False:
             kwargs["response_format"] = response_format
         r = _client.chat.completions.create(**kwargs)
         result = r.choices[0].message.content

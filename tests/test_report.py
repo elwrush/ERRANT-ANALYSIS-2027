@@ -16,18 +16,18 @@ class TestRenderReport:
         tmpl = env.get_template(template_path.name)
         html = tmpl.render(
             student_id="99999", name="Test", class_label="M3-1A",
-            word_count=100, error_rate=15, cefr_level="B2", target_rate=7,
+            word_count=100, error_rate=15, cefr_level="B2", target_rate=15,
             chart_path="/fake/path.png", summary_praise="", summary_errors=[],
             corrected_markup="Hello world.", original_text="Hello world.",
             today="July 13, 2026", header_logo_left="/images/ACT.png",
             header_logo_right="/images/cambridge.png",
         )
-        assert "Mathayom Program" in html
+        assert "C·E·L Mathayom" in html
         assert "Writing Accuracy Feedback Report" in html
         assert "Test" in html
         assert "Hello world" in html
         assert "99999" in html
-        assert "target error rate" in html.lower()
+        assert "benchmark" in html.lower()
         assert "Your Writing with Corrections" in html
         assert "Your Original Writing (Uncorrected)" in html
 
@@ -39,7 +39,7 @@ class TestRenderReport:
 
 
 class TestChartGeneration:
-    def test_generate_chart_creates_png(self, tmp_path):
+    def test_generate_chart_creates_svg(self, tmp_path):
         from generate_report import generate_chart
         import os
         os.chdir(Path(__file__).resolve().parent.parent)
@@ -51,7 +51,7 @@ class TestChartGeneration:
         ]
         chart_path = generate_chart(student, data_points)
         assert Path(chart_path).exists()
-        assert Path(chart_path).suffix == ".png"
+        assert Path(chart_path).suffix == ".svg"
         # Clean up
         Path(chart_path).unlink(missing_ok=True)
 
@@ -117,6 +117,7 @@ class TestHtmlToPdfGraceful:
 class TestRenderReportMocked:
     def test_render_creates_pdf(self, mocker, tmp_path):
         mocker.patch("generate_report.html_to_pdf", return_value=tmp_path / "out.pdf")
+        mocker.patch("generate_report._file_to_data_uri", return_value="data:image/svg+xml;base64,dGVzdA==")
         from generate_report import render_report
         student = {"student_id": "99999", "name": "T", "class": "M3-4A", "word_count": 10, "error_rate": 5}
         result = render_report(student, Path("templates/report.html"), tmp_path / "out.pdf")

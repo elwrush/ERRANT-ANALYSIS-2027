@@ -19,13 +19,13 @@ python src/generate_report.py <folder>     # generates per-student PDFs in PDF/<
 | `src/generate_report.py` | Per-student feedback report PDFs | `local-working/*.json` + Supabase `error_reports` historical data | `PDF/{class}/` PDF files |
 | `src/errant_analysis.py` | Run ERRANT on transcribed JSONs | Ingestion JSONs | `local-working/` JSONs with `errant_analysis` field |
 | `src/batch_errant_upsert.py` | Load pipeline results into Supabase | `local-working/` JSONs | Upserts to `error_reports` table |
-| `src/config.py` | Shared constants: `B1_TARGET=19`, `B2_TARGET=15`, ERRANT code names, API keys | — | — |
+| `src/config.py` | Shared constants: `B1_TARGET=15`, `B2_TARGET=10`, ERRANT code names, API keys | — | — |
 
 ## Critical rules
 
 1. **Two-pass architecture**: grading pass (`technical_report_writer.py`, examiner prose) → student feedback (`generate_report.py`, warm HTML/underlines). Never merge.
-2. **Student report benchmarks**: The benchmark lines in student PDFs use `B1_TARGET=19` and `B2_TARGET=15` from `config.py`. These are NOT CEFR-mandated — they are based on Štulrajterová (2023) observed rates.
-3. **`generate_report.py` chart fix**: Use `chart_path.as_uri()` for Playwright `set_content()` — bare POSIX paths won't load. Base64 data URIs also work.
+2. **Student report benchmarks**: The benchmark lines in student PDFs use `B1_TARGET=15` and `B2_TARGET=10` from `config.py`. These are NOT CEFR-mandated — they are aspirational classroom targets adapted from Štulrajterová (2023).
+3. **`generate_report.py` chart**: SVG charts saved via matplotlib `format="svg"`. Images (logos, charts) are embedded as base64 data URIs via `_file_to_data_uri()` — Playwright's `set_content()` cannot load bare POSIX paths or `file://` URIs reliably.
 4. **`technical_report_writer.py` footer**: `footer_template` (snake_case) not `footerTemplate`.
 5. **Playwright page number footer**: `display_header_footer=True` with `footer_template='<span class="pageNumber"></span>'`.
 
@@ -67,6 +67,6 @@ When appending student reports (Appendix 2), the merge script:
 | `templates/tech_report.html` | Main report Jinja2 template (sections, tables, inline SVG charts) |
 | `templates/report.html` | Individual student feedback report template |
 | `outputs/drafts/` | Markdown drafts with reference JSON data parsed into `context.references` |
-| `outputs/charts/` | Per-student error rate tracking charts (intermediate PNG, inlined as SVG in main report) |
+| `outputs/charts/` | Per-student error rate tracking charts (SVG, loaded via file URI in student feedback) |
 | `PDF/` | Generated per-student feedback report PDFs by class |
 | `images/ACT.png` , `images/cambridge.png` | Masthead logos (embedded as base64 in reports) |

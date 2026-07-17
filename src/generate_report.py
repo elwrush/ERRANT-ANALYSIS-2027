@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Generate report PDFs from ERRANT analysis outputs."""
+import base64
+import mimetypes
 import os
 import re
 import sys
@@ -48,6 +50,14 @@ def _strip_salutation(text, name):
     text = re.sub(r'^(Dear|Hi)\s+\w+\s*,\s*\n*\s*', '', text, flags=re.IGNORECASE)
     text = text.lstrip("\n\r ")
     return text
+
+
+def _file_to_data_uri(path):
+    mime, _ = mimetypes.guess_type(str(path))
+    if not mime:
+        mime = "application/octet-stream"
+    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
 
 
 def esc(text):
@@ -119,16 +129,6 @@ def _summarize_errors(errors):
     return total, level_str, cat_str
 
 
-def build_typ_header():
-    lines = []
-    lines.append('#set page(paper: "a4", margin: (x: 1.5cm, top: 2.0cm, bottom: 1.5cm))')
-    lines.append('#set text(font: "Roboto", size: 14pt)')
-    lines.append('#set par(leading: 0.5em)')
-    lines.append("")
-    return "\n".join(lines)
-
-
-
 
 
 def _format_date(dt_str):
@@ -163,16 +163,15 @@ def generate_chart(student, data_points):
     labels.append(date.today().strftime("%b %-d") if os.name != "nt" else date.today().strftime("%b %d").lstrip("0").replace("  ", " "))
 
     fig, ax = plt.subplots(figsize=(5, 2.5))
-    ax.plot(labels, rates, marker="o", linestyle="-", linewidth=2, color="#2563eb")
+    ax.plot(labels, rates, marker="o", linestyle="-", linewidth=2, color="#000000")
     for i, (lb, r) in enumerate(zip(labels, rates)):
         if r is None:
             continue
         ax.annotate(f"{r}%", (lb, r), textcoords="offset points", xytext=(0, 10),
-                    ha="center", fontsize=8, color="#2563eb")
+                    ha="center", fontsize=8, color="#000000")
 
     level = _infer_cefr_level(student.get("class", ""))
     target = B1_TARGET if level == "B1" else B2_TARGET
-    label = f"Target ({level})"
 
     valid_rates = [r for r in rates if r is not None]
     max_val = max(max(valid_rates) + 10, target + 5) if valid_rates else target + 5
@@ -182,9 +181,19 @@ def generate_chart(student, data_points):
     ax.axhspan(0, target, xmin=0, xmax=1, facecolor="#cccccc", alpha=0.18)
     # Solid target line
     ax.axhline(y=target, color="#555555", linestyle="-", linewidth=1.5)
-    ax.annotate(label, xy=(1, target), xycoords=("axes fraction", "data"),
-                xytext=(5, -8), textcoords="offset points", fontsize=8,
-                color="#555555", fontweight="bold", va="top")
+
+    # Target label at the end of the horizontal line (inline with line)
+    ax.annotate(f"Target ({level})", xy=(1, target), xycoords=("axes fraction", "data"),
+                xytext=(4, 0), textcoords="offset points", fontsize=8,
+                color="#555555", fontweight="bold", va="center")
+
+    # Target percentage on left y-axis
+    yticks = list(ax.get_yticks())
+    if target not in yticks:
+        yticks.append(target)
+        yticks.sort()
+    ax.set_yticks(yticks)
+    ax.set_yticklabels([f"{int(t)}%" if t == int(t) else f"{t}%" for t in yticks])
 
     ax.set_ylabel("Error rate (%)", fontsize=9)
     ax.tick_params(axis="x", labelsize=8)
@@ -196,8 +205,8 @@ def generate_chart(student, data_points):
     sid = student["student_id"]
     chart_dir = OUTPUTS_DIR / "charts"
     chart_dir.mkdir(parents=True, exist_ok=True)
-    path = chart_dir / f"{sid}.png"
-    fig.savefig(path, dpi=150)
+    path = chart_dir / f"{sid}.svg"
+    fig.savefig(path, format="svg")
     plt.close(fig)
     print(f"  Chart saved: {path}")
     return path
@@ -219,10 +228,13 @@ def fetch_historical_data(student_id):
                 .order("date")\
                 .execute()
             if result.data:
-                # Rename date to submission_date for uniform handling
+                # Filter out NULL error_percent and rename date
+                filtered = []
                 for d in result.data:
-                    d.setdefault("submission_date", d.pop("date", ""))
-                return result.data[-4:]
+                    if d.get("error_percent") is not None:
+                        d.setdefault("submission_date", d.pop("date", ""))
+                        filtered.append(d)
+                return filtered[-5:]
     except Exception:
         pass
     # Fallback: local JSON file
@@ -237,7 +249,7 @@ def fetch_historical_data(student_id):
             seen[key] = e
         unique = list(seen.values())
         unique.sort(key=lambda x: x.get("submission_date", ""))
-        return unique[-4:]
+        return unique[-5:]
     return []
 
 
@@ -274,19 +286,28 @@ def render_report(student: dict, template_path: Path, output_path: Path) -> Path
 
     summary_data = student.get("summary_data")
     summary_errors = []
-    if isinstance(summary_data, dict) and summary_data.get("errors"):
-        for err in summary_data["errors"]:
-            summary_errors.append({
-                "name": err.get("name", ""),
-                "explanation": err.get("explanation", ""),
-            })
+    summary_segue = ""
+    if isinstance(summary_data, dict):
+        if summary_data.get("errors"):
+            for err in summary_data["errors"]:
+                summary_errors.append({
+                    "name": err.get("name", ""),
+                    "explanation": err.get("explanation", ""),
+                })
+        summary_segue = "Here are some language points to be aware of:" if summary_data.get("errors") else ""
 
     corrected_text = student.get("corrected_typst", student.get("corrected_text", ""))
     corrected_markup = corrected_text.replace("#underline[", "<u>").replace("]", "</u>")
 
     project_root = Path(__file__).resolve().parent.parent
-    chart_path = project_root / "outputs" / "charts" / f"{student['student_id']}.png"
+    chart_path = project_root / "outputs" / "charts" / f"{student['student_id']}.svg"
     chart_path = chart_path.resolve()
+    chart_data_uri = _file_to_data_uri(chart_path)
+
+    logo_left = project_root / "images" / "cambridge.png"
+    logo_right = project_root / "images" / "ACT.png"
+    logo_left_uri = _file_to_data_uri(logo_left)
+    logo_right_uri = _file_to_data_uri(logo_right)
 
     html = tmpl.render(
         student_id=student["student_id"],
@@ -296,16 +317,60 @@ def render_report(student: dict, template_path: Path, output_path: Path) -> Path
         error_rate=student.get("error_rate"),
         cefr_level=level,
         target_rate=target,
-        chart_path=chart_path.as_uri(),
+        chart_path=chart_data_uri,
         summary_praise=summary_data.get("praise", "") if summary_data else "",
+        summary_segue=summary_segue,
         summary_errors=summary_errors,
         corrected_markup=corrected_markup,
         original_text=student.get("original_text", ""),
         today=date.today().strftime("%B %d, %Y"),
-        header_logo_left=Path("images/ACT.png").resolve().as_uri(),
-        header_logo_right=Path("images/cambridge.png").resolve().as_uri(),
+        header_logo_left=logo_left_uri,
+        header_logo_right=logo_right_uri,
     )
     return html_to_pdf(html, output_path)
+
+
+def _interleave_pdfs(pdf_paths, output_path):
+    import fitz
+    docs = [fitz.open(str(p)) for p in pdf_paths]
+    max_pages = max(len(d) for d in docs)
+    out = fitz.open()
+    for page_idx in range(max_pages):
+        for doc in docs:
+            if page_idx < len(doc):
+                out.insert_pdf(doc, from_page=page_idx, to_page=page_idx)
+    out.save(str(output_path))
+    out.close()
+    for d in docs:
+        d.close()
+
+
+def _flatten_pdf(input_path, output_path):
+    import subprocess
+    try:
+        subprocess.run(
+            [
+                "gs", "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER",
+                "-sDEVICE=pdfwrite",
+                "-dCompatibilityLevel=1.7",
+                "-dPDFSETTINGS=/printer",
+                "-dEmbedAllFonts=true",
+                "-dSubsetFonts=true",
+                "-dDetectDuplicateImages=true",
+                "-dCannotEmbedFontPolicy=/Warning",
+                "-dColorConversionStrategy=/LeaveColorUnchanged",
+                "-dNOOPTIMIZE=true",
+                f"-sOutputFile={output_path}",
+                str(input_path),
+            ],
+            check=True, capture_output=True, timeout=120,
+        )
+    except FileNotFoundError:
+        print("  Warning: Ghostscript not found — skipping flatten")
+        output_path.write_bytes(input_path.read_bytes())
+    except subprocess.CalledProcessError as e:
+        print(f"  Ghostscript failed (stderr): {e.stderr.decode(errors='replace')[:200]}")
+        output_path.write_bytes(input_path.read_bytes())
 
 
 def main():
@@ -354,14 +419,35 @@ def main():
     pdf_dir.mkdir(parents=True, exist_ok=True)
 
     template_path = Path(__file__).resolve().parent.parent / "templates" / "report.html"
+    individual_pdfs = []
     for idx, student in enumerate(students):
         sid = student["student_id"]
         pdf_path = pdf_dir / f"{today}-{safe_class}-{sid}.pdf"
         try:
             render_report(student, template_path, pdf_path)
             print(f"  PDF ({idx+1}/{len(students)}): {pdf_path.name}")
+            individual_pdfs.append(pdf_path)
         except Exception as e:
             print(f"  Error generating {sid}: {e}")
+
+    # Merge all individual PDFs into one interleaved file (even for 1 student)
+    merged_path = pdf_dir / f"{today}-{safe_class}-errant-report.pdf"
+    try:
+        _interleave_pdfs(individual_pdfs, merged_path)
+        print(f"\n  Merged {len(individual_pdfs)} PDFs → {merged_path.name}")
+        print("  (Pages interleaved for double-sided booklet printing)")
+
+        # Delete individual PDFs
+        for p in individual_pdfs:
+            p.unlink()
+
+        # Flatten with Ghostscript
+        flat_path = pdf_dir / f"{today}-{safe_class}-errant-report-flat.pdf"
+        _flatten_pdf(merged_path, flat_path)
+        flat_path.replace(merged_path)
+        print(f"  Flattened: {merged_path.name}")
+    except Exception as e:
+        print(f"  Error merging/flattening: {e}")
 
     print(f"\n{'='*50}")
     print(f"Done. {len(students)} student(s) in {pdf_dir}/")

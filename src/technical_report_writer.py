@@ -123,7 +123,7 @@ class TechReportTemplateContext(BaseModel):
     sections: list[ReportSection]
     references: list[ReferenceEntry]
     appendix_tables: list[dict]
-    data: AggregatedReportData | None = None
+    data: "AggregatedReportData | None" = None
 
 
 class AggregatedReportData(BaseModel):
@@ -495,7 +495,8 @@ def render_technical_report(
         img_path = project_root / rel_path
         if not img_path.exists():
             return ""
-        import base64, mimetypes
+        import base64
+        import mimetypes
         raw = img_path.read_bytes()
         mime = mimetypes.guess_type(str(img_path))[0] or "image/png"
         b64 = base64.b64encode(raw).decode("ascii")
