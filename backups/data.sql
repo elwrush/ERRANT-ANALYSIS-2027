@@ -4,7 +4,7 @@ SET session_replication_role = replica;
 -- PostgreSQL database dump
 --
 
--- \restrict GyI3NCAgg5Rh1vdvPDpZgwRgwCzn3FLKKRfTH3AZrJfilRkclHcouq9echyEYuw
+-- \restrict OvbCLBabiIfG1Tjsb6s6UChELpFv5cdxUwhij2Aaiaqg8aqly82F07LFKm9vQMv
 
 -- Dumped from database version 15.8
 -- Dumped by pg_dump version 17.6
@@ -15798,7 +15798,7 @@ SELECT pg_catalog.setval('"public"."cambridge_reading_grades_id_seq"', 441, true
 -- Name: error_reports_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('"public"."error_reports_id_seq"', 2482, true);
+SELECT pg_catalog.setval('"public"."error_reports_id_seq"', 2503, true);
 
 
 --
@@ -15819,6 +15819,6 @@ SELECT pg_catalog.setval('"public"."student_submissions_id_seq"', 4145, true);
 -- PostgreSQL database dump complete
 --
 
--- \unrestrict GyI3NCAgg5Rh1vdvPDpZgwRgwCzn3FLKKRfTH3AZrJfilRkclHcouq9echyEYuw
+-- \unrestrict OvbCLBabiIfG1Tjsb6s6UChELpFv5cdxUwhij2Aaiaqg8aqly82F07LFKm9vQMv
 
 RESET ALL;
