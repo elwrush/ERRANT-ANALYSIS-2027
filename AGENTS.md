@@ -9,6 +9,7 @@ ruff check src/ tests/
 pytest tests/ -v
 python src/technical_report_writer.py render <draft.md> <output.pdf>
 python src/generate_report.py <folder>     # generates per-student PDFs in PDF/<folder>/
+python src/errant_analysis.py --batch <folder> --insert  # run analysis + insert to Supabase error_reports (gated; omit --insert for analysis only)
 ```
 
 ## Key scripts & data flow
@@ -19,6 +20,7 @@ python src/generate_report.py <folder>     # generates per-student PDFs in PDF/<
 | `src/generate_report.py` | Per-student feedback report PDFs | `local-working/*.json` + Supabase `error_reports` historical data | `PDF/{class}/` PDF files |
 | `src/errant_analysis.py` | Run ERRANT on transcribed JSONs | Ingestion JSONs | `local-working/` JSONs with `errant_analysis` field |
 | `src/batch_errant_upsert.py` | Load pipeline results into Supabase | `local-working/` JSONs | Upserts to `error_reports` table |
+| `src/errant_analysis.py --insert` | Insert analysis results into Supabase | `local-working/` JSONs (gated, no-insert by default) | INSERTs to `error_reports` table with duplicate check |
 | `src/config.py` | Shared constants: `B1_TARGET=15`, `B2_TARGET=10`, ERRANT code names, API keys | — | — |
 
 ## Critical rules

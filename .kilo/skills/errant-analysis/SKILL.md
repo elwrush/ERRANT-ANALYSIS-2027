@@ -25,9 +25,9 @@ Processes all JSON files in `outputs/` with 5 parallel workers. Optional folder 
 ### Supabase batch upsert (for migrated/supplemental records)
 ```bash
 python src/migrate_writing_records.py
-python src/batch_errant_upsert.py
+python src/batch_errant_upsert.py --upsert
 ```
-The migration script backs up existing error_reports, clones the table, and inserts new records from `student_submissions` with `error_percent: NULL`. The batch upsert script then processes those records: fetches student text from `student_submissions`, runs `correct_text()` + ERRANT annotation, and upserts error counts back to Supabase. The script includes automatic fluency rewrite detection (length ratio, edit density, sentence splitting checks) with retry logic — if a correction is flagged as a fluency rewrite (>1.3x length expansion, >1.0 edits/word, or >2x sentence splitting), it retries up to 3 times.
+The migration script backs up existing error_reports, clones the table, and inserts new records from `student_submissions` with `error_percent: NULL`. The batch script then processes those records: fetches student text from `student_submissions`, runs `correct_text()` + ERRANT annotation, and upserts error counts back to Supabase. **`--upsert` is REQUIRED to write to Supabase** — without it, the script runs analysis, saves a checkpoint to `local-working/batch_errant_results.json`, and exits with a DRY RUN message. Never write to Supabase unless explicitly requested. The script includes automatic fluency rewrite detection (length ratio, edit density, sentence splitting checks) with retry logic — if a correction is flagged as a fluency rewrite (>1.3x length expansion, >1.0 edits/word, or >2x sentence splitting), it retries up to 3 times.
 
 ### Agent workflow
 
@@ -70,11 +70,13 @@ This project uses Supabase for:
 
 ### Environment variables
 
-| Variable | Purpose | How to get |
-|----------|---------|------------|
-| `SUPABASE_URL` | PostgREST endpoint | Supabase Dashboard → Settings → API → Project URL |
-| `SUPABASE_ESL_KEY` | Service role key (anon key also works for reads) | Supabase Dashboard → Settings → API → `service_role` key |
-| `SUPABASE_ACCESS_TOKEN` | Management API token for DDL / migrations | https://supabase.com/dashboard/account/tokens → Generate token → `sbp_...` |
+All keys live in the **zsh environment**: `~/.env` (sourced by `.zshrc` via `set -a; source ~/.env; set +a`) plus direct `export` lines in `~/.zshrc` / `~/.zshenv`. If a var is missing, add it there and open a new shell. `src/ingest.py` also reads the project `.env` as fallback, but the pipeline scripts (`errant_analysis.py`, `batch_errant_upsert.py`, `generate_report.py`) read `os.environ` directly.
+
+| Variable | Where it lives | Purpose |
+|----------|---------------|---------|
+| `SUPABASE_URL` | `~/.env` | PostgREST endpoint (`https://hdpwaqprrgnndkgzmnan.supabase.co`) |
+| `SUPABASE_ESL_KEY` | `~/.env` | Service role key (anon key also works for reads) |
+| `SUPABASE_ACCESS_TOKEN` | `~/.zshrc` | Management API token for DDL / migrations (`sbp_...`) |
 
 ### SQL migrations (DDL)
 
@@ -138,7 +140,7 @@ pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
 
-Required env vars:
+Required env vars (zsh env — `~/.env` or `~/.zshrc`/`~/.zshenv` exports):
 - `DEEPSEEK_API_KEY` — correction & summary via deepseek-v4-flash (DeepSeek API direct)
 - `SUPABASE_URL` + `SUPABASE_ESL_KEY` — for classlist lookup and Supabase upload (skipped if absent)
 

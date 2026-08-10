@@ -23,6 +23,10 @@ from errant_analysis import (
 
 load_dotenv()
 
+# Never write to Supabase unless explicitly requested with --upsert.
+# Analysis + checkpoint are always allowed; only the write is gated.
+ENABLE_UPSERT = False
+
 
 def process_one_record(student_text, word_count, nlp, annotator, max_attempts=3):
     student_text = student_text.strip()
@@ -203,6 +207,14 @@ def main():
         print("\nNo results to upsert.")
         return
 
+    if not ENABLE_UPSERT:
+        print("\n" + "=" * 50)
+        print("DRY RUN — results computed and checkpoint saved, but NOT written to Supabase.")
+        print("Re-run with --upsert to write these results to error_reports.")
+        print(f"  Results ready: {len(results)} (checkpoint: {CHECKPOINT_FILE})")
+        print("=" * 50)
+        return
+
     # Fetch existing error_reports rows to supply NOT NULL columns for upsert
     print("Fetching existing error_reports data...")
     all_existing = client.table("error_reports").select("*").execute().data
@@ -284,4 +296,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--upsert" in sys.argv:
+        ENABLE_UPSERT = True
+        sys.argv.remove("--upsert")
     main()

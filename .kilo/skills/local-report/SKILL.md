@@ -33,7 +33,7 @@ The merged PDF is flattened with Ghostscript (`pdfwrite` device, `CompatibilityL
 
 ## Output
 
-- `PDF/{folder}/{dd-mm-yy}-{class}-errant-report.pdf` — single interleaved, flattened PDF
+- `PDF/{folder}/{dd-mm-yy}-{HHMM}-{class}-errant-report.pdf` — single interleaved, flattened PDF (timestamped so same-day runs never clash)
 - `outputs/charts/{student_id}.svg` — per-student error rate SVG chart (black line, grayscale-safe, target line inline-annotated)
 
 ## Template
@@ -52,4 +52,4 @@ Targets (aspirational classroom targets, not CEFR-mandated):
 pip install -r requirements.txt
 ```
 
-Env vars: `SUPABASE_URL`, `SUPABASE_ESL_KEY` (for historical error chart data from `error_reports` table).
+Env vars (zsh env — `~/.env` sourced by `~/.zshrc`): `SUPABASE_URL`, `SUPABASE_ESL_KEY` (for historical error chart data from `error_reports` table).

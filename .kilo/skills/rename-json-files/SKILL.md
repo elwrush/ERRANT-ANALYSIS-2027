@@ -14,4 +14,4 @@ The script scans all JSONs in `local-working/`, extracts `student_id` from conte
 
 ## Prerequisites
 
-`SUPABASE_URL` and `SUPABASE_ESL_KEY` env vars (optional — skips validation if missing).
+`SUPABASE_URL` and `SUPABASE_ESL_KEY` env vars (set in `~/.env`, the zsh env — optional, skips validation if missing).

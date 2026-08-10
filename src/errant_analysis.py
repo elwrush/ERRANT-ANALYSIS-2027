@@ -16,7 +16,6 @@ from config import (
     MAX_WORKERS, MAX_OUTPUT_TOKENS, get_api_key,
     ERRANT_CODE_NAMES, ERRANT_CODE_TO_COLUMN, ERROR_CODE_COLUMNS,
 )
-from generate_report import esc
 from models import ErrantOutput
 import spacy
 import errant
@@ -30,6 +29,7 @@ API_KEY = get_api_key("DEEPSEEK_API_KEY")
 _client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com", max_retries=0)
 
 MISSING_STUDENT_IDS: dict[str, list[str]] = {}
+ENABLE_INSERT = False
 
 # Whole-text correction prompt — minimal edits: fix errors, don't rewrite
 CORRECTION_PROMPT = """Fix the text below.
@@ -419,15 +419,28 @@ def insert_error_reports(output: dict):
             tqdm.write("  Supabase credentials not set  -  skipping error_reports insert")
             return
         client = create_client(supabase_url, supabase_key)
+        student_id = output["student_id"]
+        submission_date = output.get("date_created", "")
+
+        # Check for duplicate (student_id + date)
+        existing = client.table("error_reports")\
+            .select("id")\
+            .eq("student_id", student_id)\
+            .eq("date", submission_date)\
+            .execute()
+        if existing.data:
+            tqdm.write(f"  Duplicate: {student_id} on {submission_date} already exists — skipping")
+            return
+
         row = {
-            "student_id": output["student_id"],
+            "student_id": student_id,
             "class": output.get("class", ""),
             "name": output.get("name", ""),
             "error_percent": output["error_rate"] if output["error_rate"] is not None else None,
             "summary": output.get("summary", ""),
             "word_count": output.get("word_count", 0),
             "academic_year": 2027,
-            "date": output.get("date_created", ""),
+            "date": submission_date,
         }
         for col in ERROR_CODE_COLUMNS:
             row[col] = 0
@@ -437,7 +450,17 @@ def insert_error_reports(output: dict):
             if col:
                 row[col] = e["count"]
         client.table("error_reports").insert(row).execute()
-        tqdm.write(f"  Inserted into error_reports for {output['student_id']} ({len(errors)} error types)")
+
+        # Verify insert succeeded
+        verified = client.table("error_reports")\
+            .select("id")\
+            .eq("student_id", student_id)\
+            .eq("date", submission_date)\
+            .execute()
+        if verified.data:
+            tqdm.write(f"  Inserted into error_reports for {student_id} ({len(errors)} error types) — verified")
+        else:
+            tqdm.write(f"  Insert failed: {student_id} on {submission_date} not found after insert")
     except Exception as e:
         tqdm.write(f"  Warning: could not insert into error_reports: {e}")
 
@@ -489,10 +512,10 @@ def post_classify_other(o_str, c_str):
     return "OTHER"
 
 
-def build_corrected_typst(orig_doc, edits, original_text=""):
-    """Build Typst markup from ERRANT edits. Paragraph breaks (\\n\\n)
-    are preserved automatically via spaCy token whitespace (text_with_ws).
-    No additional paragraph break insertion is needed."""
+def build_corrected_html(orig_doc, edits, original_text=""):
+    """Build HTML markup from ERRANT edits. Corrections are wrapped in <u> tags.
+    Paragraph breaks (\\n\\n) are preserved automatically via spaCy token
+    whitespace (text_with_ws)."""
     edits = sorted(edits, key=lambda e: e.o_start)
     tokens = list(orig_doc)
     result_parts = []
@@ -502,7 +525,6 @@ def build_corrected_typst(orig_doc, edits, original_text=""):
     while i < len(tokens):
         if edit_idx < len(edits) and i == edits[edit_idx].o_start:
             edit = edits[edit_idx]
-            # Deduplicate: skip if this edit is identical to the previous one (same position, same text)
             if edit_idx > 0:
                 prev = edits[edit_idx - 1]
                 if (edit.o_start == prev.o_start and edit.o_end == prev.o_end
@@ -519,8 +541,7 @@ def build_corrected_typst(orig_doc, edits, original_text=""):
                 edit_idx += 1
                 continue
             if edit.c_toks:
-                result_parts.append(f"#underline[{esc(edit.c_str)}]")
-                # Preserve trailing whitespace from last consumed token
+                result_parts.append(f"<u>{edit.c_str}</u>")
                 if edit.o_toks:
                     last_idx = edit.o_end - 1
                     if 0 <= last_idx < len(tokens):
@@ -529,10 +550,9 @@ def build_corrected_typst(orig_doc, edits, original_text=""):
                         result_parts.append(ws)
             i = edit.o_end if edit.o_toks else (edit.o_end if edit.o_end > edit.o_start else i)
             edit_idx += 1
-            # Preserve whitespace between consecutive edits
             if edit_idx < len(edits) and i < len(tokens) and i == edits[edit_idx].o_start:
                 if tokens[i].text_with_ws and not tokens[i].text_with_ws[0].isspace():
-                    pass  # next edit starts on a non-whitespace token, no extra space needed
+                    pass
                 elif i < len(tokens) and not result_parts[-1].endswith(" "):
                     result_parts.append(" ")
         else:
@@ -540,7 +560,9 @@ def build_corrected_typst(orig_doc, edits, original_text=""):
             i += 1
 
     result = "".join(result_parts)
-    result = re.sub(r"\](?=[^\s\]\)])", "] ", result)
+    # Insert space after </u> when next char is a letter, digit, or start of another tag
+    # Avoids space before punctuation (. , ; : ! ?)
+    result = re.sub(r"</u>(?=[\w<])", "</u> ", result)
     return result
 
 
@@ -809,16 +831,14 @@ def classify_edits(edits, orig_tokens=None, cor_tokens=None):
     return errors_list, uncategorised, dropped_edits
 
 
-def _reinsert_paragraph_breaks_llm(original_text, corrected_typst):
+def _reinsert_paragraph_breaks_llm(original_text, corrected_text):
     """Re-insert paragraph breaks (\\n\\n) using a lightweight DeepSeek call.
-    
-    The correction model strips paragraph breaks. Rather than fragile deterministic
-    text-matching, this asks the LLM to read both texts and fix the paragraphs
-    like a human would — add breaks where they're missing, remove any stray ones
-    that got misplaced."""
-    if "\n\n" not in original_text:
-        return corrected_typst
 
+    Operates on PLAIN corrected text (no markup). Must be called BEFORE ERRANT
+    alignment / markup building so underlines are never at risk of being
+    stripped by the model."""
+    if "\n\n" not in original_text:
+        return corrected_text
     prompt = (
         "I have two versions of a student's writing: the original (with correct "
         "paragraph breaks) and a corrected version (grammar fixed, but the paragraph "
@@ -832,7 +852,7 @@ def _reinsert_paragraph_breaks_llm(original_text, corrected_typst):
         "---\n\n"
         "Corrected (fix the paragraphs):\n"
         "---\n"
-        f"{corrected_typst}\n"
+        f"{corrected_text}\n"
         "---\n\n"
         "Return only the corrected text with proper paragraph breaks."
     )
@@ -844,6 +864,7 @@ def _reinsert_paragraph_breaks_llm(original_text, corrected_typst):
             temperature=0.3,
             max_tokens=4096,
             timeout=30,
+            extra_body={"thinking": {"type": "disabled"}},
         )
         result = response.choices[0].message.content.strip()
         if result:
@@ -851,7 +872,7 @@ def _reinsert_paragraph_breaks_llm(original_text, corrected_typst):
     except Exception as e:
         tqdm.write(f"  LLM paragraph break insertion failed: {e}")
 
-    return corrected_typst
+    return corrected_text
 
 
 def process_file(file_path, nlp=None, annotator=None):
@@ -861,10 +882,10 @@ def process_file(file_path, nlp=None, annotator=None):
 
     student_id = data.get("student_id", "unknown")
     original_text = data.get("student_text", "").strip()
-    word_count = data.get("word_count", 0)
-    if word_count == 0 and original_text:
-        word_count = len(original_text.split())
-
+    # Strip HTML markup artifacts (ingestion pipeline stores <br> tags)
+    original_text = re.sub(r'<br\s*/?>', '\n', original_text)
+    original_text = re.sub(r'<[^>]+>', '', original_text)
+    word_count = len(original_text.split()) if original_text.strip() else 0
     if not original_text:
         tqdm.write("  Empty student_text, skipping.")
         return None
@@ -936,23 +957,25 @@ def process_file(file_path, nlp=None, annotator=None):
     else:
         tqdm.write(f"  WARNING: fluency rewrite persisted after {max_attempts} attempts — using last result")
     
-    # ---- Step 2: Run ERRANT diff on original vs corrected ----
+    # ---- Step 2: Re-insert paragraph breaks into plain corrected text ----
+    # Do this BEFORE ERRANT alignment so the <u> markup built from the edits
+    # is never passed through the LLM (which strips it).
+    if "\n\n" in original_text:
+        corrected_text = _reinsert_paragraph_breaks_llm(original_text, corrected_text)
+
+    # ---- Step 3: Run ERRANT diff on original vs corrected ----
     cor_parse = annotator.parse(corrected_text)
     edits = annotator.annotate(orig_parse, cor_parse)
 
-    # ---- Step 3: Post-process edits ----
+    # ---- Step 4: Post-process edits ----
     edits = pre_split_edits(annotator, edits, orig_parse, cor_parse)
     orig_tokens = [t.text for t in orig_parse]
     cor_tokens = [t.text for t in cor_parse]
     errors_list, uncategorised, dropped_edits = classify_edits(edits, orig_tokens, cor_tokens)
     metadata = build_metadata(edits, corrected_text, original_text)
 
-    # ---- Step 4: Build Typst markup and sentence pairs ----
-    corrected_typst = build_corrected_typst(orig_parse, edits)
-
-    # Re-insert paragraph breaks into corrected_typst (model strips them)
-    if "\n\n" in original_text:
-        corrected_typst = _reinsert_paragraph_breaks_llm(original_text, corrected_typst)
+    # ---- Step 5: Build HTML markup and sentence pairs ----
+    corrected_typst = build_corrected_html(orig_parse, edits)
 
     # Split both texts into sentences for alignment
     cor_sentences = [sent.text.strip() for sent in nlp(corrected_text).sents]
@@ -1007,8 +1030,9 @@ def _finalize_output(output, file_path):
     tqdm.write(f"  Summary ({stype}): {preview}...")
     # Re-write with summary
     write_output(output, file_path)
-    # Insert into Supabase
-    insert_error_reports(output)
+    # Insert into Supabase (gated by --upsert flag)
+    if ENABLE_INSERT:
+        insert_error_reports(output)
     return output
 
 
@@ -1104,6 +1128,19 @@ def main_batch(files):
         print(f"  Details saved to: {missing_file}")
         print("  Manually add these to Supabase classlists or update the JSON files with 'class' and 'name' fields.")
     print(f"Output: {LOCAL_WORKING_DIR}/")
+
+    # Auto-generate PDF reports from the batch results
+    folder_name = files[0].parent.name if files else None
+    if folder_name:
+        import subprocess
+        print(f"\nGenerating PDF reports for {folder_name}...")
+        result = subprocess.run(
+            [sys.executable, "src/generate_report.py", folder_name],
+            capture_output=True, text=True, timeout=600,
+        )
+        print(result.stdout)
+        if result.stderr:
+            print(result.stderr)
     print(f"{'='*50}")
 
 
@@ -1132,6 +1169,10 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--insert" in sys.argv:
+        ENABLE_INSERT = True
+        sys.argv.remove("--insert")
+
     if "--batch" in sys.argv:
         if not API_KEY:
             print("Error: no API key found. Set DEEPSEEK_API_KEY in .env or environment.")

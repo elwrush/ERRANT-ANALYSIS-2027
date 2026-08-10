@@ -9,7 +9,7 @@
 }
 body {
   font-family: Roboto, sans-serif;
-  font-size: 12pt;
+  font-size: 14pt;
   line-height: 1.4;
   margin: 0;
   padding: 0;
@@ -30,19 +30,19 @@ body {
 .separator { border: none; border-top: 1pt solid #000; margin: 0.5em 0; }
 .center { text-align: center; }
 .title { font-size: 16pt; font-weight: bold; margin: 0.5em 0; }
-.subtitle { font-size: 12pt; margin: 0.5em 0; }
+.subtitle { font-size: 14pt; margin: 0.5em 0; }
 .section-title { font-size: 16pt; font-weight: bold; margin: 1em 0 0.5em; }
-.section-desc { font-size: 12pt; margin: 0.5em 0; }
+.section-desc { font-size: 14pt; margin: 0.5em 0; }
 .chart { text-align: center; margin: 0.5em 0; }
 .chart img { width: 80%; max-width: 80%; }
-.chart-note { font-size: 12pt; margin: 0.5em 0; }
-.chart-target { font-size: 12pt; margin: 0.5em 0; }
-.summary-text { font-size: 12pt; margin: 0.5em 0; line-height: 1.5; }
-.summary-segue { font-size: 12pt; margin: 0.3em 0; font-style: italic; }
-.summary-error { font-size: 12pt; margin: 0.3em 0; }
-.correction-text { font-size: 12pt; margin: 0.5em 0; line-height: 1.6; }
-.original-text { font-size: 12pt; margin: 0.5em 0; line-height: 1.6; }
-.signature { font-size: 12pt; margin-top: 2em; }
+.chart-note { font-size: 14pt; margin: 0.5em 0; }
+.chart-target { font-size: 14pt; margin: 0.5em 0; }
+.summary-text { font-size: 14pt; margin: 0.5em 0; line-height: 1.5; }
+.summary-segue { font-size: 14pt; margin: 0.3em 0; font-style: italic; }
+.summary-error { font-size: 14pt; margin: 0.3em 0; }
+.correction-text { font-size: 14pt; margin: 0.5em 0; line-height: 1.6; white-space: pre-wrap; }
+.original-text { font-size: 14pt; margin: 0.5em 0; line-height: 1.6; white-space: pre-wrap; }
+.signature { font-size: 14pt; margin-top: 2em; }
 .vspace { margin: 0.5em 0; }
 .vspace-large { margin: 1em 0; }
 u { text-decoration: underline; }
@@ -99,14 +99,15 @@ The solid line in the chart below shows the {{ cefr_level }} benchmark (~{{ targ
 <div class="chart-note">Your writing was too short to give you error rate feedback. Please write at least 40 words to get a feedback score. (You wrote {{ word_count }} words.)</div>
 {% endif %}
 
-<div class="page-break"></div>
+<div class="vspace-large"></div>
+<div class="vspace"></div>
 
 <div class="section-title">Your Writing with Corrections</div>
 <div class="section-desc">I scanned your writing for errors and underlined the corrections below. Carefully comparing the corrected and original versions will help you become more aware of common mistakes and improve your writing skills.</div>
 
 <div class="vspace"></div>
 
-<div class="correction-text">{{ corrected_markup }}</div>
+<div class="correction-text">{{ corrected_markup | safe }}</div>
 
 <div class="vspace-large"></div>
 

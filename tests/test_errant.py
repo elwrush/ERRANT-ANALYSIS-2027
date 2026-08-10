@@ -624,25 +624,25 @@ class TestExtractCorrection:
         assert text is None
 
 
-class TestBuildCorrectedTypst:
+class TestBuildCorrectedHtml:
     def test_no_edits(self):
-        from errant_analysis import build_corrected_typst
+        from errant_analysis import build_corrected_html
         import spacy
         nlp = spacy.load("en_core_web_sm")
         doc = nlp("Hello world.")
-        result = build_corrected_typst(doc, [])
+        result = build_corrected_html(doc, [])
         assert "Hello" in result
 
     def test_simple_replacement(self):
-        from errant_analysis import build_corrected_typst, _make_edit
+        from errant_analysis import build_corrected_html, _make_edit
         import spacy
         nlp = spacy.load("en_core_web_sm")
         doc = nlp("He go to store.")
         edits = [
             _make_edit(1, 2, doc[1:2], "go", 1, 2, doc[1:2], "goes", "R:VERB:SVA"),
         ]
-        result = build_corrected_typst(doc, edits)
-        assert "#underline[goes]" in result
+        result = build_corrected_html(doc, edits)
+        assert "<u>goes</u>" in result
 
 
 class TestPreSplitEdits:
@@ -715,10 +715,25 @@ class TestGenerateSummaryMocked:
 
 class TestReinsertParagraphBreaks:
     def test_llm_returns_fixed_text(self, mocker):
-        from errant_analysis import _reinsert_paragraph_breaks_llm
-        mocker.patch("errant_analysis._call_api", return_value="Hello.\n\nWorld.")
+        from errant_analysis import _client, _reinsert_paragraph_breaks_llm
+        mock_create = mocker.patch.object(_client.chat.completions, "create")
+        mock_create.return_value.choices[0].message.content = "Hello.\n\nWorld."
         result = _reinsert_paragraph_breaks_llm("Hello.\n\nWorld.", "Hello. World.")
-        assert "\\n\\n" in result or "\n\n" in result
+        assert "\n\n" in result
+        _, kwargs = mock_create.call_args
+        assert kwargs.get("extra_body", {}).get("thinking") == {"type": "disabled"}
+
+    def test_no_paragraphs_returns_unchanged(self):
+        from errant_analysis import _reinsert_paragraph_breaks_llm
+        result = _reinsert_paragraph_breaks_llm("Hello world.", "Hello world.")
+        assert result == "Hello world."
+
+    def test_llm_failure_returns_original(self, mocker):
+        from errant_analysis import _client, _reinsert_paragraph_breaks_llm
+        mock_create = mocker.patch.object(_client.chat.completions, "create")
+        mock_create.side_effect = Exception("API down")
+        result = _reinsert_paragraph_breaks_llm("Hello.\n\nWorld.", "Hello. World.")
+        assert result == "Hello. World."
 
 
 class TestMigrateLegacyOutput:

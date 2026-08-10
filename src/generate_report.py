@@ -60,20 +60,6 @@ def _file_to_data_uri(path):
     return f"data:{mime};base64,{b64}"
 
 
-def esc(text):
-    text = str(text)
-    text = _sanitize_unicode(text)
-    text = text.replace("\\", "\\\\")
-    text = text.replace("#", "\\#")
-    text = text.replace("$", "\\$")
-    text = text.replace("{", "\\{")
-    text = text.replace("}", "\\}")
-    text = text.replace("[", "\\[")
-    text = text.replace("]", "\\]")
-    text = text.replace("~", "\\~")
-    return text
-
-
 def _format_summary_paragraph(summary_text):
     """Convert analysis summary into displayable form.
     
@@ -330,19 +316,19 @@ def render_report(student: dict, template_path: Path, output_path: Path) -> Path
     return html_to_pdf(html, output_path)
 
 
-def _interleave_pdfs(pdf_paths, output_path):
+def _pad_and_merge_pdfs(pdf_paths, output_path):
     import fitz
-    docs = [fitz.open(str(p)) for p in pdf_paths]
-    max_pages = max(len(d) for d in docs)
     out = fitz.open()
-    for page_idx in range(max_pages):
-        for doc in docs:
-            if page_idx < len(doc):
-                out.insert_pdf(doc, from_page=page_idx, to_page=page_idx)
+    for p in pdf_paths:
+        doc = fitz.open(str(p))
+        out.insert_pdf(doc)
+        pages = len(out)
+        needed = (4 - pages % 4) % 4
+        for _ in range(needed):
+            out.new_page(width=595, height=842)
+        doc.close()
     out.save(str(output_path))
     out.close()
-    for d in docs:
-        d.close()
 
 
 def _flatten_pdf(input_path, output_path):
@@ -378,13 +364,19 @@ def main():
 
     files = sorted(LOCAL_WORKING_DIR.rglob("*.json"))
     if folder_name:
-        files = [f for f in files if f.stem.startswith(folder_name + "-")]
+        # Match ONLY {folder_name}-{record_id} files. Prefix matching alone is
+        # too loose: "M3-4A-assignment-2-29561.json" would slip into a "M3-4A"
+        # run. The record_id is a single segment (no hyphens), so require the
+        # exact folder prefix followed by one hyphen-free segment.
+        pattern = re.compile(rf"^{re.escape(folder_name)}-[^-]+$")
+        files = [f for f in files if pattern.match(f.stem)]
 
     if not files:
         print(f"No analysis output files found in {LOCAL_WORKING_DIR}/")
         sys.exit(1)
 
     today = date.today().strftime("%d-%m-%y")
+    run_time = datetime.now().strftime("%H%M")
     class_name = "combined"
     students = []
 
@@ -422,7 +414,7 @@ def main():
     individual_pdfs = []
     for idx, student in enumerate(students):
         sid = student["student_id"]
-        pdf_path = pdf_dir / f"{today}-{safe_class}-{sid}.pdf"
+        pdf_path = pdf_dir / f"{today}-{run_time}-{safe_class}-{sid}.pdf"
         try:
             render_report(student, template_path, pdf_path)
             print(f"  PDF ({idx+1}/{len(students)}): {pdf_path.name}")
@@ -431,18 +423,18 @@ def main():
             print(f"  Error generating {sid}: {e}")
 
     # Merge all individual PDFs into one interleaved file (even for 1 student)
-    merged_path = pdf_dir / f"{today}-{safe_class}-errant-report.pdf"
+    merged_path = pdf_dir / f"{today}-{run_time}-{safe_class}-errant-report.pdf"
     try:
-        _interleave_pdfs(individual_pdfs, merged_path)
+        _pad_and_merge_pdfs(individual_pdfs, merged_path)
         print(f"\n  Merged {len(individual_pdfs)} PDFs → {merged_path.name}")
-        print("  (Pages interleaved for double-sided booklet printing)")
+        print("  (Each student padded to 4 pages, concatenated sequentially)")
 
         # Delete individual PDFs
         for p in individual_pdfs:
             p.unlink()
 
         # Flatten with Ghostscript
-        flat_path = pdf_dir / f"{today}-{safe_class}-errant-report-flat.pdf"
+        flat_path = pdf_dir / f"{today}-{run_time}-{safe_class}-errant-report-flat.pdf"
         _flatten_pdf(merged_path, flat_path)
         flat_path.replace(merged_path)
         print(f"  Flattened: {merged_path.name}")
