@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page { size: A4; margin: 1.8cm; }
+@media print { .no-break { page-break-inside: avoid; } }
+h1, h2, h3 { page-break-after: avoid; }
+p { orphans: 2; widows: 2; }
+
+body {
+  font-family: Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #222;
+  margin: 0;
+  padding: 0;
+}
+
+.masthead {
+  display: grid;
+  grid-template-columns: 0.8fr 1.4fr 0.8fr;
+  align-items: center;
+  margin-bottom: 0.5em;
+}
+.masthead-left { text-align: left; }
+.masthead-left img { height: 1.95cm; }
+.masthead-center { text-align: center; font-size: 18pt; font-weight: bold; letter-spacing: 0.5pt; }
+.masthead-right { text-align: right; }
+.masthead-right img { height: 1.15cm; }
+.masthead-sep { border: none; border-top: 1.5pt solid #000; margin: 0 0 0.5em 0; }
+
+.report-title { font-size: 18pt; font-weight: bold; text-align: center; margin-bottom: 2px; }
+.report-date { font-size: 12pt; color: #222; text-align: center; margin-bottom: 0.8em; }
+
+h1 {
+  font-size: 14pt;
+  font-weight: bold;
+  margin: 1em 0 0.4em 0;
+  padding-bottom: 3pt;
+  border-bottom: 1pt solid #000;
+}
+h2 { font-size: 12pt; font-weight: bold; margin: 0.8em 0 0.3em 0; }
+h3 { font-size: 11pt; font-weight: bold; margin: 0.6em 0 0.2em 0; }
+
+p { margin: 0.35em 0; }
+ul, ol { margin: 0.25em 0 0.25em 1.5em; }
+li { margin: 0.12em 0; }
+
+.stat-row { display: flex; gap: 12px; margin: 14px 0; }
+.stat-card {
+  flex: 1; border: 1pt solid #999; padding: 8px 12px; text-align: center; background: #f7f7f7;
+}
+.stat-card .num { font-size: 22pt; font-weight: bold; line-height: 1; }
+.stat-card .lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.5pt; color: #222; margin-top: 3px; }
+
+.dark-box {
+  background: #222; color: #fff; padding: 10px 14px; margin: 14px 0;
+}
+.dark-box .tag {
+  font-size: 8pt; text-transform: uppercase; letter-spacing: 1.5pt;
+  border: 1px solid #fff; display: inline-block; padding: 1px 7px; margin-bottom: 4px;
+}
+.dark-box p { margin: 0.1em 0; color: #eee; }
+.dark-box p strong { color: #fff; }
+
+.callout { border-left: 3pt solid #222; padding: 6px 12px; margin: 10px 0; background: #f5f5f5; }
+.callout p { margin: 0.1em 0; }
+
+table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }
+table th {
+  background: #222; color: #fff; text-align: left;
+  padding: 5px 8px; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.5pt;
+}
+table td { padding: 4px 8px; border-bottom: 0.5pt solid #ccc; }
+table td.num { text-align: right; }
+
+.ref-entry {
+  padding-left: 1.5em; text-indent: -1.5em;
+  margin-bottom: 4px; font-size: 12pt; line-height: 1.35;
+  page-break-inside: avoid;
+}
+.ref-doi { font-size: 9pt; word-break: break-all; }
+
+.footer {
+  margin-top: 30px; padding-top: 6px;
+  border-top: 0.5pt solid #ccc; font-size: 8pt; color: #222; text-align: center;
+}
+
+hr.divider { border: none; border-top: 0.5pt solid #ddd; margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="masthead-left"><img src="{{ context.masthead_right }}" alt="Cambridge"></div>
+  <div class="masthead-center">C&middot;E&middot;L Mathayom</div>
+  <div class="masthead-right"><img src="{{ context.masthead_left }}" alt="ACT"></div>
+</div>
+<hr class="masthead-sep">
+
+<div class="report-title">{{ context.report_title }}</div>
+<div class="report-date">Ed Rush &mdash; Error Analysis Report &mdash; {{ context.generated_at }}</div>
+
+{% set d = context.data %}
+{% set o = d.overall_stats %}
+{% set codes = d.error_code_summary %}
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="num">{{ "%.0f"|format(o.mean_error_rate) }}%</div>
+    <div class="lbl">Mean error rate (n={{ o.n_students }})</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">{{ "%.1f"|format(codes[0].percentage) }}%</div>
+    <div class="lbl">Orthographic errors as share of all errors</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">{{ "%.1f"|format(codes[1].percentage) }}%</div>
+    <div class="lbl">Noun errors as share of all errors</div>
+  </div>
+</div>
+
+{% for section in context.sections %}
+  {% if section.title.lower() != "references" %}
+  <h1>{{ section.title }}</h1>
+  {{ section.body | safe }}
+  {% endif %}
+{% endfor %}
+
+<hr class="divider">
+
+<h1>References</h1>
+{% for ref in context.references %}
+<div class="ref-entry">
+  {{ ref.formatted | safe }}
+</div>
+{% endfor %}
+
+<div class="footer">
+  Ed Rush &mdash; Error Analysis Report &mdash; {{ context.generated_at }}
+</div>
+
+</body>
+</html>

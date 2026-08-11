@@ -421,7 +421,7 @@ def generate_charts(data: AggregatedReportData, output_dir: Path) -> list[ChartR
 
 def _parse_sections(markdown_text: str) -> tuple[list[dict], list[ReferenceEntry]]:
     from markdown_it import MarkdownIt
-    md_parser = MarkdownIt("commonmark")
+    md_parser = MarkdownIt("commonmark").enable("table")
     lines = markdown_text.split("\n")
     sections: list[dict] = []
     refs: list[ReferenceEntry] = []
