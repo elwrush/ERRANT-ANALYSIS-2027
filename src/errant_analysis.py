@@ -512,17 +512,35 @@ def post_classify_other(o_str, c_str):
     return "OTHER"
 
 
+def _paragraph_break_counts(text):
+    """Map whitespace-delimited token index -> number of newlines in the gap
+    before that token. ERRANT's whitespace tokenizer collapses newlines, so
+    paragraph breaks must be recovered from the raw text to emit <br> tags."""
+    counts = {}
+    prev_end = 0
+    for idx, m in enumerate(re.finditer(r"\S+", text)):
+        n = text[prev_end:m.start()].count("\n")
+        if n:
+            counts[idx] = n
+        prev_end = m.end()
+    return counts
+
+
 def build_corrected_html(orig_doc, edits, original_text=""):
     """Build HTML markup from ERRANT edits. Corrections are wrapped in <u> tags.
-    Paragraph breaks (\\n\\n) are preserved automatically via spaCy token
-    whitespace (text_with_ws)."""
+    Paragraph breaks are emitted as <br> tags (ERRANT's tokenizer collapses
+    newlines, so breaks are recovered from the original text)."""
     edits = sorted(edits, key=lambda e: e.o_start)
     tokens = list(orig_doc)
+    para_breaks = _paragraph_break_counts(original_text) if original_text else {}
     result_parts = []
     edit_idx = 0
     i = 0
 
     while i < len(tokens):
+        n_breaks = para_breaks.get(i, 0)
+        if n_breaks:
+            result_parts.append("<br>" * n_breaks)
         if edit_idx < len(edits) and i == edits[edit_idx].o_start:
             edit = edits[edit_idx]
             if edit_idx > 0:
@@ -560,9 +578,9 @@ def build_corrected_html(orig_doc, edits, original_text=""):
             i += 1
 
     result = "".join(result_parts)
-    # Insert space after </u> when next char is a letter, digit, or start of another tag
-    # Avoids space before punctuation (. , ; : ! ?)
-    result = re.sub(r"</u>(?=[\w<])", "</u> ", result)
+    # Insert space after </u> when next char is a letter/digit or another <u>
+    # tag; never before punctuation or a <br> tag
+    result = re.sub(r"</u>(?=\w|(?=<u))", "</u> ", result)
     return result
 
 
@@ -882,9 +900,10 @@ def process_file(file_path, nlp=None, annotator=None):
 
     student_id = data.get("student_id", "unknown")
     original_text = data.get("student_text", "").strip()
-    # Strip HTML markup artifacts (ingestion pipeline stores <br> tags)
-    original_text = re.sub(r'<br\s*/?>', '\n', original_text)
-    original_text = re.sub(r'<[^>]+>', '', original_text)
+    # Normalize legacy HTML artifacts: <br> becomes a line break, other tags stripped.
+    # Paragraph breaks survive as \n and are re-emitted as <br> in build_corrected_html.
+    original_text = re.sub(r"<br\s*/?>", "\n", original_text, flags=re.IGNORECASE)
+    original_text = re.sub(r"<[^>]+>", "", original_text)
     word_count = len(original_text.split()) if original_text.strip() else 0
     if not original_text:
         tqdm.write("  Empty student_text, skipping.")
@@ -975,7 +994,7 @@ def process_file(file_path, nlp=None, annotator=None):
     metadata = build_metadata(edits, corrected_text, original_text)
 
     # ---- Step 5: Build HTML markup and sentence pairs ----
-    corrected_typst = build_corrected_html(orig_parse, edits)
+    corrected_typst = build_corrected_html(orig_parse, edits, original_text)
 
     # Split both texts into sentences for alignment
     cor_sentences = [sent.text.strip() for sent in nlp(corrected_text).sents]

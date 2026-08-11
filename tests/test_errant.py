@@ -645,6 +645,42 @@ class TestBuildCorrectedHtml:
         assert "<u>goes</u>" in result
 
 
+class TestBuildCorrectedHtmlParagraphBreaks:
+    """Paragraph breaks in the original text must survive ERRANT's whitespace
+    tokenizer and be emitted as <br> tags (pure HTML end-to-end)."""
+
+    def test_paragraph_breaks_become_br_tags(self):
+        from errant_analysis import build_corrected_html
+        orig = annotator.parse("Hello world.\n\nSecond paragraph.")
+        result = build_corrected_html(orig, [], "Hello world.\n\nSecond paragraph.")
+        assert "<br><br>" in result
+        assert "Hello world." in result
+        assert "Second paragraph." in result
+
+    def test_paragraph_breaks_survive_edits(self):
+        from errant_analysis import build_corrected_html, _make_edit
+        orig = annotator.parse("He go home.\n\nHe is tired.")
+        edits = [
+            _make_edit(1, 2, orig[1:2], "go", 1, 2, orig[1:2], "goes", "R:VERB:SVA"),
+        ]
+        result = build_corrected_html(orig, edits, "He go home.\n\nHe is tired.")
+        assert "<u>goes</u>" in result
+        assert "<br><br>" in result
+        assert result.index("<br>") < result.index("tired")
+
+    def test_single_newline_emits_single_br(self):
+        from errant_analysis import build_corrected_html
+        orig = annotator.parse("Line one.\nLine two.")
+        result = build_corrected_html(orig, [], "Line one.\nLine two.")
+        assert "<br>" in result
+        assert "<br><br>" not in result
+
+    def test_paragraph_break_counts(self):
+        from errant_analysis import _paragraph_break_counts
+        assert _paragraph_break_counts("A.\n\nB.\nC.") == {1: 2, 2: 1}
+        assert _paragraph_break_counts("No breaks here.") == {}
+
+
 class TestPreSplitEdits:
     def test_no_other_edits(self):
         from errant_analysis import pre_split_edits, _make_edit

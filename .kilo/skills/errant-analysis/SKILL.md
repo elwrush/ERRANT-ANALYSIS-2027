@@ -51,7 +51,7 @@ local-working/{folder}-{student_id}.json
 For example, `outputs/M2-4A BASELINE/30399.json` produces `local-working/M2-4A BASELINE-30399.json`.
 
 Each output file contains:
-- `original_text`, `corrected_text`, `corrected_typst` (with `#underline[correction]` markup)
+- `original_text`, `corrected_text`, `corrected_typst` (pure HTML: `<u>correction</u>` for edits, `<br>` / `<br><br>` for paragraph breaks)
 - `errant_analysis.errors[]` — error types with counts and context spans
 - `sentence_pairs[]` — aligned original/corrected sentence pairs
 - `summary` — personalised feedback with hallucination-verified examples
