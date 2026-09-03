@@ -711,7 +711,8 @@ CREATE TABLE IF NOT EXISTS "public"."classlists" (
     "class" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
-    "user_id" "uuid" DEFAULT "auth"."uid"()
+    "user_id" "uuid" DEFAULT "auth"."uid"(),
+    "password" "text"
 );
 
 
