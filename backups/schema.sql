@@ -444,6 +444,23 @@ $$;
 
 ALTER FUNCTION "public"."update_overall_cefr_trigger"() OWNER TO "postgres";
 
+
+CREATE OR REPLACE FUNCTION "public"."verify_student_password"("p_student_id" "text", "p_password" "text") RETURNS TABLE("student_id" "text", "name" "text", "class" "text")
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+BEGIN
+  RETURN QUERY
+  SELECT c.student_id, c.name, c.class
+  FROM classlists c
+  WHERE c.student_id = p_student_id
+    AND c.password_hash = crypt(p_password, c.password_hash);
+END;
+$$;
+
+
+ALTER FUNCTION "public"."verify_student_password"("p_student_id" "text", "p_password" "text") OWNER TO "postgres";
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -712,7 +729,7 @@ CREATE TABLE IF NOT EXISTS "public"."classlists" (
     "created_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
     "user_id" "uuid" DEFAULT "auth"."uid"(),
-    "password" "text"
+    "password_hash" "text"
 );
 
 
@@ -1231,6 +1248,10 @@ CREATE INDEX "idx_cambridge_student_id" ON "public"."writing_assessment_cambridg
 
 
 
+CREATE INDEX "idx_classlists_student_id" ON "public"."classlists" USING "btree" ("student_id");
+
+
+
 CREATE INDEX "idx_egp_level" ON "public"."egp_statements" USING "btree" ("level");
 
 
@@ -1344,6 +1365,10 @@ CREATE POLICY "Enable read access based on Student ID" ON "public"."student_subm
 
 
 
+CREATE POLICY "Service role full access" ON "public"."classlists" TO "service_role" USING (true) WITH CHECK (true);
+
+
+
 CREATE POLICY "Students can insert their own writing" ON "public"."student_submissions" FOR INSERT WITH CHECK (("student_id" IN ( SELECT "profiles"."student_id"
    FROM "public"."profiles"
   WHERE ("profiles"."id" = ( SELECT "auth"."uid"() AS "uid")))));
@@ -1359,10 +1384,6 @@ CREATE POLICY "Students can view their own submissions" ON "public"."student_sub
 CREATE POLICY "Superusers can view all submissions" ON "public"."student_submissions" FOR SELECT USING ((EXISTS ( SELECT 1
    FROM "public"."profiles"
   WHERE (("profiles"."id" = "auth"."uid"()) AND ("profiles"."role" = 'superuser'::"text")))));
-
-
-
-CREATE POLICY "Users can manage their own classlists" ON "public"."classlists" TO "authenticated" USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -1626,6 +1647,13 @@ GRANT ALL ON FUNCTION "public"."update_overall_cefr_trigger"() TO "service_role"
 
 
 
+REVOKE ALL ON FUNCTION "public"."verify_student_password"("p_student_id" "text", "p_password" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."verify_student_password"("p_student_id" "text", "p_password" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."verify_student_password"("p_student_id" "text", "p_password" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."verify_student_password"("p_student_id" "text", "p_password" "text") TO "service_role";
+
+
+
 
 
 
@@ -1671,8 +1699,6 @@ GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public".
 
 
 
-GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."classlists" TO "anon";
-GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."classlists" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."classlists" TO "service_role";
 
 
