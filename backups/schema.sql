@@ -845,6 +845,18 @@ CREATE TABLE IF NOT EXISTS "public"."linguistic_features" (
 ALTER TABLE "public"."linguistic_features" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."password_recovery" (
+    "student_id" "text" NOT NULL,
+    "password" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
+    "name" "text",
+    "class" "text"
+);
+
+
+ALTER TABLE "public"."password_recovery" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "id" "uuid" NOT NULL,
     "email" "text",
@@ -1183,6 +1195,11 @@ ALTER TABLE ONLY "public"."linguistic_features"
 
 
 
+ALTER TABLE ONLY "public"."password_recovery"
+    ADD CONSTRAINT "password_recovery_pkey" PRIMARY KEY ("student_id");
+
+
+
 ALTER TABLE ONLY "public"."profiles"
     ADD CONSTRAINT "profiles_email_key" UNIQUE ("email");
 
@@ -1315,6 +1332,11 @@ ALTER TABLE ONLY "public"."linguistic_features"
 
 
 
+ALTER TABLE ONLY "public"."password_recovery"
+    ADD CONSTRAINT "password_recovery_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "public"."classlists"("student_id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."student_submissions"
     ADD CONSTRAINT "student_submissions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id");
 
@@ -1369,6 +1391,10 @@ CREATE POLICY "Service role full access" ON "public"."classlists" TO "service_ro
 
 
 
+CREATE POLICY "Service role full access" ON "public"."password_recovery" TO "service_role" USING (true) WITH CHECK (true);
+
+
+
 CREATE POLICY "Students can insert their own writing" ON "public"."student_submissions" FOR INSERT WITH CHECK (("student_id" IN ( SELECT "profiles"."student_id"
    FROM "public"."profiles"
   WHERE ("profiles"."id" = ( SELECT "auth"."uid"() AS "uid")))));
@@ -1401,6 +1427,9 @@ ALTER TABLE "public"."classlists" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."error_reports" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."password_recovery" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
@@ -1724,6 +1753,10 @@ GRANT ALL ON SEQUENCE "public"."error_reports_id_seq" TO "service_role";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."linguistic_features" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."linguistic_features" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."linguistic_features" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."password_recovery" TO "service_role";
 
 
 
