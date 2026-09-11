@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -54,6 +55,21 @@ class TestChartGeneration:
         assert Path(chart_path).suffix == ".svg"
         # Clean up
         Path(chart_path).unlink(missing_ok=True)
+
+    def test_generate_chart_is_alpha_free(self):
+        from generate_report import generate_chart
+        import os
+        os.chdir(Path(__file__).resolve().parent.parent)
+
+        student = {"student_id": "99999", "error_rate": 20}
+        data_points = [{"error_percent": 30, "created_at": "2026-01-15"}]
+        chart_path = generate_chart(student, data_points)
+        try:
+            svg = Path(chart_path).read_text(encoding="utf-8")
+            assert "opacity" not in svg
+            assert "fill: #ffffff" in svg
+        finally:
+            Path(chart_path).unlink(missing_ok=True)
 
 
 class TestHistoricalData:
@@ -122,3 +138,56 @@ class TestRenderReportMocked:
         student = {"student_id": "99999", "name": "T", "class": "M3-4A", "word_count": 10, "error_rate": 5}
         result = render_report(student, Path("templates/report.html"), tmp_path / "out.pdf")
         assert result is not None
+
+
+class TestNoGhostscript:
+    def test_report_modules_do_not_invoke_ghostscript(self):
+        root = Path(__file__).resolve().parent.parent
+        for name in ("generate_report.py", "technical_report_writer.py"):
+            src = (root / "src" / name).read_text(encoding="utf-8")
+            assert "pdfwrite" not in src, f"{name} still references pdfwrite"
+            assert "subprocess" not in src, f"{name} still uses subprocess"
+            assert '"gs"' not in src and "'gs'" not in src, f"{name} still invokes gs"
+
+
+class TestSingleFileOutput:
+    def test_main_writes_one_pdf_per_student(self, mocker, tmp_path):
+        import json
+        import generate_report as gr
+
+        lw = tmp_path / "local-working"
+        lw.mkdir()
+        for sid in ("90001", "90002"):
+            (lw / f"M2-3B-{sid}.json").write_text(
+                json.dumps({
+                    "student_id": sid, "class": "M2-3B", "name": sid,
+                    "original_text": "x", "corrected_text": "x",
+                    "word_count": 50, "error_rate": 10,
+                }),
+                encoding="utf-8",
+            )
+
+        pdf_dir = tmp_path / "PDF"
+        mocker.patch.object(gr, "LOCAL_WORKING_DIR", lw)
+        mocker.patch.object(gr, "PDF_DIR", pdf_dir)
+        mocker.patch.object(gr, "OUTPUTS_DIR", tmp_path / "outputs")
+        mocker.patch.object(gr, "fetch_historical_data", return_value=[])
+        mocker.patch.object(gr, "generate_chart", return_value=None)
+
+        def fake_render(student, template_path, output_path):
+            Path(output_path).write_bytes(b"%PDF-1.4")
+            return output_path
+
+        mocker.patch.object(gr, "render_report", side_effect=fake_render)
+        mocker.patch.object(sys, "argv", ["generate_report.py", "M2-3B"])
+
+        gr.main()
+
+        pdfs = sorted((pdf_dir / "M2-3B").glob("*.pdf"))
+        assert len(pdfs) == 2
+        assert not list((pdf_dir / "M2-3B").glob("*-errant-report*.pdf"))
+        for p in pdfs:
+            assert p.name.endswith(("-90001.pdf", "-90002.pdf"))
+            assert re.match(r"^\d{2}-\d{2}-\d{2}-\d{4}-.+-9000[12]\.pdf$", p.name), p.name
+
+

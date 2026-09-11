@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Generate report PDFs from ERRANT analysis outputs."""
-import base64
-import mimetypes
 import os
 import re
 import sys
@@ -14,6 +12,7 @@ from config import (
     LOCAL_WORKING_DIR, OUTPUTS_DIR, PDF_DIR,
     ERRANT_CODE_NAMES, B1_TARGET, B2_TARGET,
 )
+from image_utils import opaque_data_uri
 
 def human_error_type(err_type):
     if err_type in ERRANT_CODE_NAMES:
@@ -53,11 +52,7 @@ def _strip_salutation(text, name):
 
 
 def _file_to_data_uri(path):
-    mime, _ = mimetypes.guess_type(str(path))
-    if not mime:
-        mime = "application/octet-stream"
-    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{mime};base64,{b64}"
+    return opaque_data_uri(path)
 
 
 def _format_summary_paragraph(summary_text):
@@ -163,8 +158,8 @@ def generate_chart(student, data_points):
     max_val = max(max(valid_rates) + 10, target + 5) if valid_rates else target + 5
     ax.set_ylim(0, max_val)
 
-    # Shade region below target in light gray
-    ax.axhspan(0, target, xmin=0, xmax=1, facecolor="#cccccc", alpha=0.18)
+    # Shade region below target in opaque light gray (pre-blended #cccccc @0.18 over white)
+    ax.axhspan(0, target, xmin=0, xmax=1, facecolor="#f6f6f6")
     # Solid target line
     ax.axhline(y=target, color="#555555", linestyle="-", linewidth=1.5)
 
@@ -192,7 +187,8 @@ def generate_chart(student, data_points):
     chart_dir = OUTPUTS_DIR / "charts"
     chart_dir.mkdir(parents=True, exist_ok=True)
     path = chart_dir / f"{sid}.svg"
-    fig.savefig(path, format="svg")
+    fig.patch.set_facecolor("white")
+    fig.savefig(path, format="svg", transparent=False, facecolor="white")
     plt.close(fig)
     print(f"  Chart saved: {path}")
     return path
@@ -316,49 +312,6 @@ def render_report(student: dict, template_path: Path, output_path: Path) -> Path
     return html_to_pdf(html, output_path)
 
 
-def _pad_and_merge_pdfs(pdf_paths, output_path):
-    import fitz
-    out = fitz.open()
-    for p in pdf_paths:
-        doc = fitz.open(str(p))
-        out.insert_pdf(doc)
-        pages = len(out)
-        needed = (4 - pages % 4) % 4
-        for _ in range(needed):
-            out.new_page(width=595, height=842)
-        doc.close()
-    out.save(str(output_path))
-    out.close()
-
-
-def _flatten_pdf(input_path, output_path):
-    import subprocess
-    try:
-        subprocess.run(
-            [
-                "gs", "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER",
-                "-sDEVICE=pdfwrite",
-                "-dCompatibilityLevel=1.7",
-                "-dPDFSETTINGS=/printer",
-                "-dEmbedAllFonts=true",
-                "-dSubsetFonts=true",
-                "-dDetectDuplicateImages=true",
-                "-dCannotEmbedFontPolicy=/Warning",
-                "-dColorConversionStrategy=/LeaveColorUnchanged",
-                "-dNOOPTIMIZE=true",
-                f"-sOutputFile={output_path}",
-                str(input_path),
-            ],
-            check=True, capture_output=True, timeout=120,
-        )
-    except FileNotFoundError:
-        print("  Warning: Ghostscript not found — skipping flatten")
-        output_path.write_bytes(input_path.read_bytes())
-    except subprocess.CalledProcessError as e:
-        print(f"  Ghostscript failed (stderr): {e.stderr.decode(errors='replace')[:200]}")
-        output_path.write_bytes(input_path.read_bytes())
-
-
 def main():
     folder_name = sys.argv[1] if len(sys.argv) > 1 else None
 
@@ -422,27 +375,8 @@ def main():
         except Exception as e:
             print(f"  Error generating {sid}: {e}")
 
-    # Merge all individual PDFs into one interleaved file (even for 1 student)
-    merged_path = pdf_dir / f"{today}-{run_time}-{safe_class}-errant-report.pdf"
-    try:
-        _pad_and_merge_pdfs(individual_pdfs, merged_path)
-        print(f"\n  Merged {len(individual_pdfs)} PDFs → {merged_path.name}")
-        print("  (Each student padded to 4 pages, concatenated sequentially)")
-
-        # Delete individual PDFs
-        for p in individual_pdfs:
-            p.unlink()
-
-        # Flatten with Ghostscript
-        flat_path = pdf_dir / f"{today}-{run_time}-{safe_class}-errant-report-flat.pdf"
-        _flatten_pdf(merged_path, flat_path)
-        flat_path.replace(merged_path)
-        print(f"  Flattened: {merged_path.name}")
-    except Exception as e:
-        print(f"  Error merging/flattening: {e}")
-
     print(f"\n{'='*50}")
-    print(f"Done. {len(students)} student(s) in {pdf_dir}/")
+    print(f"Done. {len(individual_pdfs)} standalone PDF(s) in {pdf_dir}/")
     print(f"{'='*50}")
 
 

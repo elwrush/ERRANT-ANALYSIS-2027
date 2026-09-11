@@ -1,9 +1,10 @@
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from image_utils import opaque_data_uri
 
 
 class FileValidationError(BaseModel):
@@ -338,7 +339,8 @@ def generate_charts(data: AggregatedReportData, output_dir: Path) -> list[ChartR
         ax.tick_params(labelsize=8)
         fig.tight_layout()
         path = chart_dir / "errant-code-frequency.svg"
-        fig.savefig(path, format="svg")
+        fig.patch.set_facecolor("white")
+        fig.savefig(path, format="svg", transparent=False, facecolor="white")
         plt.close(fig)
         refs.append(ChartRef(section="findings", path=path, caption="Error frequency by ERRANT code category", type="bar"))
 
@@ -355,12 +357,13 @@ def generate_charts(data: AggregatedReportData, output_dir: Path) -> list[ChartR
         ax.set_xticks(x)
         ax.set_xticklabels(cohorts, fontsize=9)
         ax.set_ylabel("Mean error rate (%)", fontsize=9)
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=8, framealpha=1.0)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         fig.tight_layout()
         path = chart_dir / "cohort-comparison.svg"
-        fig.savefig(path, format="svg")
+        fig.patch.set_facecolor("white")
+        fig.savefig(path, format="svg", transparent=False, facecolor="white")
         plt.close(fig)
         refs.append(ChartRef(section="findings", path=path, caption="Error rate comparison by cohort", type="grouped_bar"))
 
@@ -376,7 +379,8 @@ def generate_charts(data: AggregatedReportData, output_dir: Path) -> list[ChartR
         ax.tick_params(labelsize=8)
         fig.tight_layout()
         path = chart_dir / "error-rate-distribution.svg"
-        fig.savefig(path, format="svg")
+        fig.patch.set_facecolor("white")
+        fig.savefig(path, format="svg", transparent=False, facecolor="white")
         plt.close(fig)
         refs.append(ChartRef(section="findings", path=path, caption="Distribution of student error rates", type="histogram"))
 
@@ -412,7 +416,8 @@ def generate_charts(data: AggregatedReportData, output_dir: Path) -> list[ChartR
         ax.tick_params(labelsize=8)
         fig.tight_layout()
         path = chart_dir / "per-student-trend.svg"
-        fig.savefig(path, format="svg")
+        fig.patch.set_facecolor("white")
+        fig.savefig(path, format="svg", transparent=False, facecolor="white")
         plt.close(fig)
         refs.append(ChartRef(section="findings", path=path, caption="Per-student error rate overview", type="line"))
 
@@ -495,12 +500,7 @@ def render_technical_report(
         img_path = project_root / rel_path
         if not img_path.exists():
             return ""
-        import base64
-        import mimetypes
-        raw = img_path.read_bytes()
-        mime = mimetypes.guess_type(str(img_path))[0] or "image/png"
-        b64 = base64.b64encode(raw).decode("ascii")
-        return f"data:{mime};base64,{b64}"
+        return opaque_data_uri(img_path)
 
     sections = []
     refs: list[ReferenceEntry] = []
@@ -544,18 +544,6 @@ def render_technical_report(
             browser.close()
     except ImportError:
         raise RuntimeError("Playwright not installed. Run: pip install playwright && playwright install chromium")
-    try:
-        flattened = output_path.with_stem(output_path.stem + "-flattened")
-        subprocess.run(
-            ["gs", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
-             "-dPDFSETTINGS=/default", "-dNOPAUSE", "-dQUIET", "-dBATCH",
-             f"-sOutputFile={flattened}", str(output_path)],
-            capture_output=True, timeout=60,
-        )
-        if flattened.exists():
-            flattened.replace(output_path)
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
-        pass
     return output_path
 
 

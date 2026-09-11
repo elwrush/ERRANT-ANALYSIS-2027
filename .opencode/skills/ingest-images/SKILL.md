@@ -1,3 +1,17 @@
+---
+name: ingest-images
+description: 'Transcribe handwritten student essays from scanned images into structured JSON using Gemini 2.5 Flash via OpenRouter. Use when asked to ingest/OCR scanned essays, run src/ingest.py, process inputs/{folder}/ images into outputs/{folder}/{id}.json, or when resolving GHOST_REPORT.txt / student-ID sign-off before ERRANT analysis.'
+license: MIT
+compatibility:
+  - python3
+  - pip install -r requirements.txt
+  - OPENROUTER_API_KEY (zsh env)
+  - supabase (CLI, optional, for classlist lookup)
+metadata:
+  author: C.E.L Mathayom / ACT
+  version: 1.0.0
+---
+
 # Skill: ingest-images
 
 ## Purpose

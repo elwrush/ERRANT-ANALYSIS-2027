@@ -473,19 +473,22 @@ class TestGenerateCharts:
 
     def test_charts_grayscale(self):
         from technical_report_writer import generate_charts
-        from PIL import Image
-        import numpy as np
+        import re
         data = _sample_aggregated_data()
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             refs = generate_charts(data, out)
+            assert refs, "expected at least one chart"
             for r in refs:
-                img = Image.open(r.path).convert("RGB")
-                arr = np.array(img)
-                if arr.size > 0:
-                    r_eq_g = np.allclose(arr[:,:,0], arr[:,:,1], atol=5)
-                    g_eq_b = np.allclose(arr[:,:,1], arr[:,:,2], atol=5)
-                    assert r_eq_g and g_eq_b, f"Chart {r.path} has color-only differentiation (R!=G!=B)"
+                svg = Path(r.path).read_text(encoding="utf-8")
+                for hexcol in re.findall(r"#([0-9a-fA-F]{6})", svg):
+                    r_ch = int(hexcol[0:2], 16)
+                    g_ch = int(hexcol[2:4], 16)
+                    b_ch = int(hexcol[4:6], 16)
+                    assert abs(r_ch - g_ch) <= 5 and abs(g_ch - b_ch) <= 5, (
+                        f"Chart {r.path} has color-only differentiation (#{hexcol})"
+                    )
+                assert "opacity" not in svg, f"Chart {r.path} contains transparency"
 
     def test_trend_chart_included(self):
         from technical_report_writer import generate_charts

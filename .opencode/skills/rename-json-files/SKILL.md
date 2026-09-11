@@ -1,3 +1,15 @@
+---
+name: rename-json-files
+description: 'Rename ERRANT output JSONs in local-working/ from prefixed names (M2-4A-36018.json) to plain student-ID names (36018.json), validated against the Supabase classlists table. Use when asked to rename or validate local-working JSON filenames.'
+license: MIT
+compatibility:
+  - python3
+  - SUPABASE_URL + SUPABASE_ESL_KEY (optional; skips validation if missing)
+metadata:
+  author: C.E.L Mathayom / ACT
+  version: 1.0.0
+---
+
 # Skill: rename-json-files
 
 ## Purpose

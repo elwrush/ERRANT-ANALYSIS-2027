@@ -1,3 +1,17 @@
+---
+name: errant-analysis
+description: 'Run ERRANT grammatical error analysis on transcribed student essays (outputs/{folder}/*.json) and save per-student results to local-working/. Use when asked to run ERRANT analysis, the errant-analysis pipeline, classify or count student writing errors with ERRANT, or process a class folder through DeepSeek V4 Flash correction + ERRANT annotation + LLM summaries. Covers the GHOST_REPORT.txt gate and the gated Supabase error_reports insert (--insert).'
+license: MIT
+compatibility:
+  - python3
+  - pip install -r requirements.txt
+  - python -m spacy download en_core_web_sm
+  - supabase (CLI, already linked to the project) for ad-hoc queries and DDL
+metadata:
+  author: C.E.L Mathayom / ACT
+  version: 1.0.0
+---
+
 # Skill: errant-analysis
 
 ## Purpose
@@ -21,6 +35,14 @@ Shows a numbered menu of available files from `outputs/`. Select one to process.
 python src/errant_analysis.py --batch "M2-5A BASELINE"
 ```
 Processes all JSON files in `outputs/` with 5 parallel workers. Optional folder filter after `--batch` limits to a specific subfolder.
+
+Add `--insert` to ALSO write the results to the Supabase `error_reports` table:
+```bash
+python src/errant_analysis.py --batch "M2-5A BASELINE" --insert
+```
+**`--insert` is REQUIRED to write to Supabase** — without it the batch runs analysis only. Never write to Supabase unless explicitly requested by the user.
+
+At the end of a successful batch, the script auto-runs `src/generate_report.py` in a subprocess (600s timeout) to regenerate the per-student PDFs in `PDF/{folder}/`.
 
 ### Supabase batch upsert (for migrated/supplemental records)
 ```bash
@@ -70,7 +92,7 @@ This project uses Supabase for:
 
 ### Environment variables
 
-All keys live in the **zsh environment**: `~/.env` (sourced by `.zshrc` via `set -a; source ~/.env; set +a`) plus direct `export` lines in `~/.zshrc` / `~/.zshenv`. If a var is missing, add it there and open a new shell. `src/ingest.py` also reads the project `.env` as fallback, but the pipeline scripts (`errant_analysis.py`, `batch_errant_upsert.py`, `generate_report.py`) read `os.environ` directly.
+All keys live in the **zsh environment**: `~/.env` (sourced by `.zshrc` via `set -a; source ~/.env; set +a`) plus direct `export` lines in `~/.zshrc` / `~/.zshenv`. If a var is missing, add it there and open a new shell. `src/ingest.py` also reads the project `.env` as fallback, but the pipeline scripts (`errant_analysis.py`, `batch_errant_upsert.py`, `generate_report.py`) read `os.environ` directly. `errant_analysis.py` calls `load_dotenv(override=True)`, so the project `.env` also works.
 
 | Variable | Where it lives | Purpose |
 |----------|---------------|---------|
@@ -108,7 +130,7 @@ The linked-project info is stored in `supabase/.temp/linked-project.json`.
 
 ### Runtime inserts (error_reports)
 
-The `insert_error_reports()` function in `errant_analysis.py` uses the **postgrest client** (Supabase Python SDK) with `SUPABASE_URL` + `SUPABASE_ESL_KEY`. This is the correct approach for row-level inserts — the Management API is for DDL only.
+The `insert_error_reports()` function in `errant_analysis.py` uses the **postgrest client** (Supabase Python SDK) with `SUPABASE_URL` + `SUPABASE_ESL_KEY`. This is the correct approach for row-level inserts — the Management API is for DDL only. It dedupes on `(student_id, date)` and re-queries to verify.
 
 ### Maintaining the migration script (`setup_error_analysis.py`)
 
