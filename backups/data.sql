@@ -4,7 +4,7 @@ SET session_replication_role = replica;
 -- PostgreSQL database dump
 --
 
--- \restrict BRXSIEkF0DNQ1AOQAdCzcLCKa2EuJKoA2nIzHChjbMfh5VV09f8pEdsRnsCkcue
+-- \restrict cFpDEi1OPRsvW5KbVN9pg8Mi65TWlFJpONks1XtSiMeKhDzs0wlWafbNT5pFjsz
 
 -- Dumped from database version 15.8
 -- Dumped by pg_dump version 17.6
@@ -7418,6 +7418,22 @@ COPY "auth"."mfa_challenges" ("id", "factor_id", "created_at", "verified_at", "i
 
 
 --
+-- Data for Name: mfa_recovery_code_sets; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+COPY "auth"."mfa_recovery_code_sets" ("id", "user_id", "mfa_factor_id", "failed_verification_count", "verification_locked_until", "created_at", "updated_at") FROM stdin;
+\.
+
+
+--
+-- Data for Name: mfa_recovery_codes; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+COPY "auth"."mfa_recovery_codes" ("id", "mfa_recovery_code_set_id", "code_hash", "consumed_at", "created_at") FROM stdin;
+\.
+
+
+--
 -- Data for Name: oauth_authorizations; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
 --
 
@@ -7445,33 +7461,33 @@ COPY "auth"."oauth_consents" ("id", "user_id", "client_id", "scopes", "granted_a
 -- Data for Name: one_time_tokens; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
 --
 
-COPY "auth"."one_time_tokens" ("id", "user_id", "token_type", "token_hash", "relates_to", "created_at", "updated_at") FROM stdin;
-9b0dfc21-d02b-4d1d-8b8f-2bd5b1e7293b	61545f57-13d7-4d6d-9b0c-b88ce3f05cc0	confirmation_token	518fc11185d321cea138a7d1d10bdfe95fd417cb22f14ae28264a71b	ssomphansathit@gmail.com	2025-07-15 02:58:36.544814	2025-07-15 02:58:36.544814
-f6af2d44-c4e2-42f4-b202-6caa58f20951	34e06ff5-adba-4f22-ba67-36d110d9aa92	confirmation_token	f9de35a738830d11fe5c4b4cf507910a0c59f1eff48eabee4d6eabc2	28849@student.act.ac.th	2025-07-15 06:40:17.212468	2025-07-15 06:40:17.212468
-dcd33bb0-173b-4fb1-932a-e61d29fe6fbb	40431d40-3fd5-4e49-a265-460d51adedd6	confirmation_token	32330c034daa8f665342fa5b89af81dcdba929b47c7619b4d792fcd2	elwrushtha@yahoo.com	2025-07-21 03:36:02.418583	2025-07-21 03:36:02.418583
-85370baa-0964-4d16-97ee-5555a762c989	efa77e1d-de93-48b2-b24f-a5acf42f9d7a	confirmation_token	d55f973e66b3f82e43df06aee00c913b297ef2d523a27062ca189544	natee.natee2555@gmail.con	2025-09-19 05:43:16.565288	2025-09-19 05:43:16.565288
-30920013-e95a-433c-b055-e33fb36a3935	49b3ab65-5d97-4263-b28f-fac1f15409eb	confirmation_token	2ca7951fb20a8c16b943908f2a011446894adce089815eb2f6b7d953	jirawaj@gmail.com	2025-07-25 07:31:26.380258	2025-07-25 07:31:26.380258
-00930ed9-d75a-4efb-b796-980ff32bec8a	bb2b1811-0179-4aec-95fe-538e55ea8f15	confirmation_token	79ed4a195b88c1672a6a7968b01ed1a545ec3439d18d0f303eba34c3	yayartatchaporn@gmail.com	2025-07-21 07:23:01.030614	2025-07-21 07:23:01.030614
-8042760d-c870-4f2f-94a2-cb3e0b87b16b	da5591b9-ab42-408c-8e4f-5b3f28f2a564	confirmation_token	f9b7afb28583cc6ac40d2a74591b0f85ea38d5cea88a1447162c3047	29604@gmail.com	2025-07-21 07:26:37.92893	2025-07-21 07:26:37.92893
-7f35a5be-2621-417f-b247-1c66408094f9	b4e95670-7321-4d74-80db-44e3fd6e54af	confirmation_token	33e5ae847d43b73420b6f7c0f3d1f9acad349aa11b5be30113ee6e4a	apirak.pirom@iclound.com	2025-07-15 06:45:47.069361	2025-07-15 06:45:47.069361
-90540ffb-19dd-4866-af47-5b68fe72634c	0339ee48-2c52-4cc4-b6cf-3cccc8233e62	confirmation_token	b82c226399fdbf63474abdbb4581b33a0bc39ddb05bc1db40f2c5efe	p0913811@gmail.com	2025-07-22 08:42:47.009717	2025-07-22 08:42:47.009717
-f37298db-6410-450e-a28b-7a9871703800	716ebe66-ee01-42b4-9205-81b038f7da07	confirmation_token	5a21f190e12cf3079c59bbce16eb6dddc020d15d2f2251f059a091a3	34912@student.act.ac.th	2025-07-15 02:10:15.228269	2025-07-15 02:10:15.228269
-2d8f6d9f-e353-4fbc-85f4-1771f429ebf5	0549a84d-ee58-4d80-a0b9-81cf31fb249b	confirmation_token	42b9fbfafaa94a7b359941a08cf73ad37217209723e08a7b1bf6f0b9	peeradech126@gmai.com	2025-07-17 00:16:19.929973	2025-07-17 00:16:19.929973
-b86be490-a07f-4ebb-9aa8-fa12f08c6c39	e524f7c6-670d-439c-8b15-eb94df50cd98	confirmation_token	37f56c5ce38137f98192999b968f557ceb13504d5a30be7e2a578700	mumu-may@hotmail.com	2025-07-24 13:54:57.490124	2025-07-24 13:54:57.490124
-fe514fd8-940b-4cff-b160-380195c2af67	db2d5363-e336-4aa0-8dbc-31a5d6dda7bd	confirmation_token	c642c3a079b62cc0c2d378e88cc327827c0c2d29508cf0470257f146	eruuchaaa@gmail.com	2025-07-15 02:11:34.567322	2025-07-15 02:11:34.567322
-27697016-f718-4aa9-bf07-6b8500fe256c	3f04684c-72a3-4425-814f-cd44ad17b375	confirmation_token	fce65b5247991eb45b2eef2094dbef2d8d47c937706ef30a6cddc6ae	iamnutchatonnam@gmail.com	2025-07-15 10:05:51.534374	2025-07-15 10:05:51.534374
-d828c189-c53c-4212-b266-b42c9abebba3	a26fe1f0-da6f-45ce-9598-62360b12e5bd	confirmation_token	abb5f5e736203385b6f2e5470a18c205e370470c13b422e13f676549	29508@student.act.ac.th	2025-09-19 05:59:06.728257	2025-09-19 05:59:06.728257
-9063f11a-0ad6-4d62-af8e-7d3a98175e6f	8e531065-20e0-43ca-9efc-11869713ff10	confirmation_token	dc008fbfed61cf6df3733548c7115d2f49c7f91851ba900cc1ad4642	29405@student.act.ac.th	2025-07-17 01:55:36.282057	2025-07-17 01:55:36.282057
-7318e1a2-f1a9-4ce6-a926-ee7929d66cdf	ccf495da-c6cc-4987-9304-cf7cca864276	confirmation_token	17b1ccc6b83e4cdcbffcf33cefb25835992cb20d069bf594713371c3	29832@student.act.ac.th	2025-09-02 02:49:01.858832	2025-09-02 02:49:01.858832
-dfba81b7-d8f8-4ee4-bb47-9288d29caedf	ae85cf88-762f-410c-9251-17e433058d44	confirmation_token	aaed5540358654c74a139aed92982a7ab0de1ea93f430a3a7b46fc19	nuttayameuey@gmail.com	2025-12-03 13:32:54.807351	2025-12-03 13:32:54.807351
-8835c86a-4a06-4987-a74d-e90c087e58b1	45f1f3e1-ec1c-41b7-87e9-2bc7ba00b8b8	confirmation_token	b5a6fafae96cd02c5a19da6645f67c49b50aa2382bcb77f3d279fc03	test@example.com	2025-12-17 23:42:18.303813	2025-12-17 23:42:18.303813
-3a475b56-2686-48c6-a780-08f947cc3d32	13977b51-c077-4c14-a0ba-f72c080b04e6	confirmation_token	d7c8797f6d5e90e66ff1da48f07443a7bcde2105b6472e727cfdcc1f	goweb82077@fftube.com	2025-12-19 00:40:21.922957	2025-12-19 00:40:21.922957
-060975ef-d165-4627-baa0-4a00eedbb96d	c1a19150-4739-43e8-8514-fe8394043714	confirmation_token	bbaa03a79678297aab36141bfd18cb969053a39c2b1f9fac51427c3a	venice.jiaping@gmail.com	2025-09-02 05:28:01.652121	2025-09-02 05:28:01.652121
-98db0a57-cc7a-417a-bce1-0757df0a27c2	9a714570-8f20-4be5-bf7f-95af79ffbcb8	recovery_token	762f3c9cf5fee6f50c4c92085dd2371ac6c1a8ab2e58b86ba93b18e9	looo4414@gmail.com	2026-01-31 05:07:57.615194	2026-01-31 05:07:57.615194
-458f4f62-48c1-4a15-a00d-abd9b1fb7d71	b6de09df-2a7e-440f-a97e-6b6e633b3438	recovery_token	acb6046d6ec8ae1e7979346d9d69b7992a32e5f437724e7b2242c9f2	jirawajkimhia@gmail.com	2026-02-24 12:25:54.105541	2026-02-24 12:25:54.105541
-53c37606-4c67-44b8-aa23-9c86308c893a	fa30ed76-26b1-4c31-861e-6a0ec3bdc6a8	confirmation_token	09262af14a90e307006f2ca2ccfddb60068fa95a882979dbc6e9e7ce	29079@stusent	2025-07-15 15:02:01.614939	2025-07-15 15:02:01.614939
-819e9915-bfde-4d9e-8dc7-c4a09196962a	49b3ab65-5d97-4263-b28f-fac1f15409eb	recovery_token	9cdd19dca0581abe6736dc45cb909e3d5c42472d554313dac9a8bd7f	jirawaj@gmail.com	2026-03-10 07:27:46.421529	2026-03-10 07:27:46.421529
-fdc7c001-3316-4cb0-b692-8051307df65a	cf002f9f-388d-4deb-952c-b90bd1edeb33	confirmation_token	4d0d6fc7c948f63ec91ab7dcd0b07b4e852a36bbdba0a3a605f1e991	9tammapong@gmail	2025-07-15 06:37:07.438759	2025-07-15 06:37:07.438759
+COPY "auth"."one_time_tokens" ("id", "user_id", "token_type", "token_hash", "relates_to", "created_at", "updated_at", "expires_at") FROM stdin;
+9b0dfc21-d02b-4d1d-8b8f-2bd5b1e7293b	61545f57-13d7-4d6d-9b0c-b88ce3f05cc0	confirmation_token	518fc11185d321cea138a7d1d10bdfe95fd417cb22f14ae28264a71b	ssomphansathit@gmail.com	2025-07-15 02:58:36.544814	2025-07-15 02:58:36.544814	\N
+f6af2d44-c4e2-42f4-b202-6caa58f20951	34e06ff5-adba-4f22-ba67-36d110d9aa92	confirmation_token	f9de35a738830d11fe5c4b4cf507910a0c59f1eff48eabee4d6eabc2	28849@student.act.ac.th	2025-07-15 06:40:17.212468	2025-07-15 06:40:17.212468	\N
+dcd33bb0-173b-4fb1-932a-e61d29fe6fbb	40431d40-3fd5-4e49-a265-460d51adedd6	confirmation_token	32330c034daa8f665342fa5b89af81dcdba929b47c7619b4d792fcd2	elwrushtha@yahoo.com	2025-07-21 03:36:02.418583	2025-07-21 03:36:02.418583	\N
+85370baa-0964-4d16-97ee-5555a762c989	efa77e1d-de93-48b2-b24f-a5acf42f9d7a	confirmation_token	d55f973e66b3f82e43df06aee00c913b297ef2d523a27062ca189544	natee.natee2555@gmail.con	2025-09-19 05:43:16.565288	2025-09-19 05:43:16.565288	\N
+30920013-e95a-433c-b055-e33fb36a3935	49b3ab65-5d97-4263-b28f-fac1f15409eb	confirmation_token	2ca7951fb20a8c16b943908f2a011446894adce089815eb2f6b7d953	jirawaj@gmail.com	2025-07-25 07:31:26.380258	2025-07-25 07:31:26.380258	\N
+00930ed9-d75a-4efb-b796-980ff32bec8a	bb2b1811-0179-4aec-95fe-538e55ea8f15	confirmation_token	79ed4a195b88c1672a6a7968b01ed1a545ec3439d18d0f303eba34c3	yayartatchaporn@gmail.com	2025-07-21 07:23:01.030614	2025-07-21 07:23:01.030614	\N
+8042760d-c870-4f2f-94a2-cb3e0b87b16b	da5591b9-ab42-408c-8e4f-5b3f28f2a564	confirmation_token	f9b7afb28583cc6ac40d2a74591b0f85ea38d5cea88a1447162c3047	29604@gmail.com	2025-07-21 07:26:37.92893	2025-07-21 07:26:37.92893	\N
+7f35a5be-2621-417f-b247-1c66408094f9	b4e95670-7321-4d74-80db-44e3fd6e54af	confirmation_token	33e5ae847d43b73420b6f7c0f3d1f9acad349aa11b5be30113ee6e4a	apirak.pirom@iclound.com	2025-07-15 06:45:47.069361	2025-07-15 06:45:47.069361	\N
+90540ffb-19dd-4866-af47-5b68fe72634c	0339ee48-2c52-4cc4-b6cf-3cccc8233e62	confirmation_token	b82c226399fdbf63474abdbb4581b33a0bc39ddb05bc1db40f2c5efe	p0913811@gmail.com	2025-07-22 08:42:47.009717	2025-07-22 08:42:47.009717	\N
+f37298db-6410-450e-a28b-7a9871703800	716ebe66-ee01-42b4-9205-81b038f7da07	confirmation_token	5a21f190e12cf3079c59bbce16eb6dddc020d15d2f2251f059a091a3	34912@student.act.ac.th	2025-07-15 02:10:15.228269	2025-07-15 02:10:15.228269	\N
+2d8f6d9f-e353-4fbc-85f4-1771f429ebf5	0549a84d-ee58-4d80-a0b9-81cf31fb249b	confirmation_token	42b9fbfafaa94a7b359941a08cf73ad37217209723e08a7b1bf6f0b9	peeradech126@gmai.com	2025-07-17 00:16:19.929973	2025-07-17 00:16:19.929973	\N
+b86be490-a07f-4ebb-9aa8-fa12f08c6c39	e524f7c6-670d-439c-8b15-eb94df50cd98	confirmation_token	37f56c5ce38137f98192999b968f557ceb13504d5a30be7e2a578700	mumu-may@hotmail.com	2025-07-24 13:54:57.490124	2025-07-24 13:54:57.490124	\N
+fe514fd8-940b-4cff-b160-380195c2af67	db2d5363-e336-4aa0-8dbc-31a5d6dda7bd	confirmation_token	c642c3a079b62cc0c2d378e88cc327827c0c2d29508cf0470257f146	eruuchaaa@gmail.com	2025-07-15 02:11:34.567322	2025-07-15 02:11:34.567322	\N
+27697016-f718-4aa9-bf07-6b8500fe256c	3f04684c-72a3-4425-814f-cd44ad17b375	confirmation_token	fce65b5247991eb45b2eef2094dbef2d8d47c937706ef30a6cddc6ae	iamnutchatonnam@gmail.com	2025-07-15 10:05:51.534374	2025-07-15 10:05:51.534374	\N
+d828c189-c53c-4212-b266-b42c9abebba3	a26fe1f0-da6f-45ce-9598-62360b12e5bd	confirmation_token	abb5f5e736203385b6f2e5470a18c205e370470c13b422e13f676549	29508@student.act.ac.th	2025-09-19 05:59:06.728257	2025-09-19 05:59:06.728257	\N
+9063f11a-0ad6-4d62-af8e-7d3a98175e6f	8e531065-20e0-43ca-9efc-11869713ff10	confirmation_token	dc008fbfed61cf6df3733548c7115d2f49c7f91851ba900cc1ad4642	29405@student.act.ac.th	2025-07-17 01:55:36.282057	2025-07-17 01:55:36.282057	\N
+7318e1a2-f1a9-4ce6-a926-ee7929d66cdf	ccf495da-c6cc-4987-9304-cf7cca864276	confirmation_token	17b1ccc6b83e4cdcbffcf33cefb25835992cb20d069bf594713371c3	29832@student.act.ac.th	2025-09-02 02:49:01.858832	2025-09-02 02:49:01.858832	\N
+dfba81b7-d8f8-4ee4-bb47-9288d29caedf	ae85cf88-762f-410c-9251-17e433058d44	confirmation_token	aaed5540358654c74a139aed92982a7ab0de1ea93f430a3a7b46fc19	nuttayameuey@gmail.com	2025-12-03 13:32:54.807351	2025-12-03 13:32:54.807351	\N
+8835c86a-4a06-4987-a74d-e90c087e58b1	45f1f3e1-ec1c-41b7-87e9-2bc7ba00b8b8	confirmation_token	b5a6fafae96cd02c5a19da6645f67c49b50aa2382bcb77f3d279fc03	test@example.com	2025-12-17 23:42:18.303813	2025-12-17 23:42:18.303813	\N
+3a475b56-2686-48c6-a780-08f947cc3d32	13977b51-c077-4c14-a0ba-f72c080b04e6	confirmation_token	d7c8797f6d5e90e66ff1da48f07443a7bcde2105b6472e727cfdcc1f	goweb82077@fftube.com	2025-12-19 00:40:21.922957	2025-12-19 00:40:21.922957	\N
+060975ef-d165-4627-baa0-4a00eedbb96d	c1a19150-4739-43e8-8514-fe8394043714	confirmation_token	bbaa03a79678297aab36141bfd18cb969053a39c2b1f9fac51427c3a	venice.jiaping@gmail.com	2025-09-02 05:28:01.652121	2025-09-02 05:28:01.652121	\N
+98db0a57-cc7a-417a-bce1-0757df0a27c2	9a714570-8f20-4be5-bf7f-95af79ffbcb8	recovery_token	762f3c9cf5fee6f50c4c92085dd2371ac6c1a8ab2e58b86ba93b18e9	looo4414@gmail.com	2026-01-31 05:07:57.615194	2026-01-31 05:07:57.615194	\N
+458f4f62-48c1-4a15-a00d-abd9b1fb7d71	b6de09df-2a7e-440f-a97e-6b6e633b3438	recovery_token	acb6046d6ec8ae1e7979346d9d69b7992a32e5f437724e7b2242c9f2	jirawajkimhia@gmail.com	2026-02-24 12:25:54.105541	2026-02-24 12:25:54.105541	\N
+53c37606-4c67-44b8-aa23-9c86308c893a	fa30ed76-26b1-4c31-861e-6a0ec3bdc6a8	confirmation_token	09262af14a90e307006f2ca2ccfddb60068fa95a882979dbc6e9e7ce	29079@stusent	2025-07-15 15:02:01.614939	2025-07-15 15:02:01.614939	\N
+819e9915-bfde-4d9e-8dc7-c4a09196962a	49b3ab65-5d97-4263-b28f-fac1f15409eb	recovery_token	9cdd19dca0581abe6736dc45cb909e3d5c42472d554313dac9a8bd7f	jirawaj@gmail.com	2026-03-10 07:27:46.421529	2026-03-10 07:27:46.421529	\N
+fdc7c001-3316-4cb0-b692-8051307df65a	cf002f9f-388d-4deb-952c-b90bd1edeb33	confirmation_token	4d0d6fc7c948f63ec91ab7dcd0b07b4e852a36bbdba0a3a605f1e991	9tammapong@gmail	2025-07-15 06:37:07.438759	2025-07-15 06:37:07.438759	\N
 \.
 
 
@@ -8760,6 +8776,22 @@ COPY "auth"."saml_providers" ("id", "sso_provider_id", "entity_id", "metadata_xm
 --
 
 COPY "auth"."saml_relay_states" ("id", "sso_provider_id", "request_id", "for_email", "redirect_to", "created_at", "updated_at", "flow_state_id") FROM stdin;
+\.
+
+
+--
+-- Data for Name: scim_tokens; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+COPY "auth"."scim_tokens" ("id", "sso_provider_id", "token_hash", "prefix", "created_at", "expires_at", "revoked_at", "last_used_at") FROM stdin;
+\.
+
+
+--
+-- Data for Name: scim_users; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin
+--
+
+COPY "auth"."scim_users" ("id", "sso_provider_id", "user_id", "resource", "created_at", "updated_at", "deleted_at") FROM stdin;
 \.
 
 
@@ -16095,6 +16127,6 @@ SELECT pg_catalog.setval('"public"."student_submissions_id_seq"', 4145, true);
 -- PostgreSQL database dump complete
 --
 
--- \unrestrict BRXSIEkF0DNQ1AOQAdCzcLCKa2EuJKoA2nIzHChjbMfh5VV09f8pEdsRnsCkcue
+-- \unrestrict cFpDEi1OPRsvW5KbVN9pg8Mi65TWlFJpONks1XtSiMeKhDzs0wlWafbNT5pFjsz
 
 RESET ALL;
