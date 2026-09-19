@@ -4,7 +4,7 @@ SET session_replication_role = replica;
 -- PostgreSQL database dump
 --
 
--- \restrict fRoTeRzhKpSQ2a4HgohIq37mKwUrjwdAyMPuowdsNH7kjyfSSs912hZk5gC2aZ0
+-- \restrict ydKxvOv6g3cgNpDs4OFQBx0KnNvsbL8uSEtSWqW8s44ku0xZEghO8arD6En23yS
 
 -- Dumped from database version 15.8
 -- Dumped by pg_dump version 17.6
@@ -16162,6 +16162,6 @@ SELECT pg_catalog.setval('"public"."student_submissions_id_seq"', 4145, true);
 -- PostgreSQL database dump complete
 --
 
--- \unrestrict fRoTeRzhKpSQ2a4HgohIq37mKwUrjwdAyMPuowdsNH7kjyfSSs912hZk5gC2aZ0
+-- \unrestrict ydKxvOv6g3cgNpDs4OFQBx0KnNvsbL8uSEtSWqW8s44ku0xZEghO8arD6En23yS
 
 RESET ALL;
