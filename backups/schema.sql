@@ -1073,7 +1073,7 @@ CREATE TABLE IF NOT EXISTS "public"."writing_assessment_cambridge" (
     "student_id" "text" NOT NULL,
     "submission_date" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
     "academic_year" integer NOT NULL,
-    "topic" "text",
+    "topic" "text" NOT NULL,
     "student_text" "text",
     "word_count" integer,
     "overall_score" numeric(4,1),
