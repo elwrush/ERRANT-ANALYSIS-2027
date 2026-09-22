@@ -729,7 +729,9 @@ CREATE TABLE IF NOT EXISTS "public"."classlists" (
     "created_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
     "user_id" "uuid" DEFAULT "auth"."uid"(),
-    "password_hash" "text"
+    "password_hash" "text",
+    "gender" "text",
+    CONSTRAINT "classlists_gender_check" CHECK ((("gender" IS NULL) OR ("gender" = ANY (ARRAY['M'::"text", 'F'::"text"]))))
 );
 
 
