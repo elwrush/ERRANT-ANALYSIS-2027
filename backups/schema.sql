@@ -420,6 +420,63 @@ $$;
 
 ALTER PROCEDURE "public"."safe_insert_student_submission"(IN "p_student_id" "text", IN "p_skill" "text", IN "p_assessment_type" "text", IN "p_exam_question" "text", IN "p_exam_type" "text", IN "p_student_text" "text", IN "p_word_count" integer, IN "p_overall_score" numeric, IN "p_cefr_level" "text", IN "p_content_score" numeric, IN "p_communicative_achievement_score" numeric, IN "p_organisation_score" numeric, IN "p_language_score" numeric, IN "p_summary_comment" "text", IN "p_content_feedback" "text", IN "p_communicative_achievement_feedback" "text", IN "p_organisation_feedback" "text", IN "p_language_feedback" "text") OWNER TO "postgres";
 
+SET default_tablespace = '';
+
+SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."classlists" (
+    "student_id" "text" NOT NULL,
+    "name" "text" NOT NULL,
+    "class" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
+    "user_id" "uuid" DEFAULT "auth"."uid"(),
+    "password_hash" "text",
+    "gender" "text",
+    CONSTRAINT "classlists_gender_check" CHECK ((("gender" IS NULL) OR ("gender" = ANY (ARRAY['M'::"text", 'F'::"text"])))),
+    CONSTRAINT "classlists_password_hash_is_bcrypt" CHECK ((("password_hash" IS NULL) OR ("password_hash" ~ '^\$2[aby]\$'::"text")))
+);
+
+
+ALTER TABLE "public"."classlists" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_student_password"("p_student_id" "text", "p_password" "text") RETURNS "public"."classlists"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+DECLARE
+  v_row public.classlists;
+BEGIN
+  IF p_password IS NULL OR length(p_password) = 0 THEN
+    RAISE EXCEPTION 'password must not be empty' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.classlists
+     SET password_hash = extensions.crypt(p_password, extensions.gen_salt('bf', 10)),
+         updated_at = now()
+   WHERE student_id = p_student_id
+  RETURNING * INTO v_row;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'unknown student_id %', p_student_id USING ERRCODE = 'P0002';
+  END IF;
+
+  INSERT INTO public.password_recovery (student_id, password, name, class)
+  VALUES (v_row.student_id, p_password, v_row.name, v_row.class)
+  ON CONFLICT (student_id) DO UPDATE
+     SET password = EXCLUDED.password,
+         name     = EXCLUDED.name,
+         class    = EXCLUDED.class;
+
+  RETURN v_row;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."set_student_password"("p_student_id" "text", "p_password" "text") OWNER TO "postgres";
+
 
 CREATE OR REPLACE FUNCTION "public"."update_overall_cefr_trigger"() RETURNS "trigger"
     LANGUAGE "plpgsql"
@@ -460,10 +517,6 @@ $$;
 
 
 ALTER FUNCTION "public"."verify_student_password"("p_student_id" "text", "p_password" "text") OWNER TO "postgres";
-
-SET default_tablespace = '';
-
-SET default_table_access_method = "heap";
 
 
 CREATE TABLE IF NOT EXISTS "public"."cambridge-listening-grades" (
@@ -720,22 +773,6 @@ CREATE TABLE IF NOT EXISTS "public"."cefr_levels" (
 
 
 ALTER TABLE "public"."cefr_levels" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."classlists" (
-    "student_id" "text" NOT NULL,
-    "name" "text" NOT NULL,
-    "class" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "timezone"('Asia/Bangkok'::"text", "now"()) NOT NULL,
-    "user_id" "uuid" DEFAULT "auth"."uid"(),
-    "password_hash" "text",
-    "gender" "text",
-    CONSTRAINT "classlists_gender_check" CHECK ((("gender" IS NULL) OR ("gender" = ANY (ARRAY['M'::"text", 'F'::"text"]))))
-);
-
-
-ALTER TABLE "public"."classlists" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."egp_statements" (
@@ -1672,6 +1709,15 @@ GRANT ALL ON PROCEDURE "public"."safe_insert_student_submission"(IN "p_student_i
 
 
 
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."classlists" TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."set_student_password"("p_student_id" "text", "p_password" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."set_student_password"("p_student_id" "text", "p_password" "text") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."update_overall_cefr_trigger"() TO "anon";
 GRANT ALL ON FUNCTION "public"."update_overall_cefr_trigger"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_overall_cefr_trigger"() TO "service_role";
@@ -1727,10 +1773,6 @@ GRANT ALL ON SEQUENCE "public"."cambridge_reading_grades_id_seq" TO "service_rol
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "service_role";
-
-
-
-GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."classlists" TO "service_role";
 
 
 

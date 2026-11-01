@@ -4,7 +4,7 @@ SET session_replication_role = replica;
 -- PostgreSQL database dump
 --
 
--- \restrict NsjddioG9qLDdOe6LX1uIohb4ME7sU8cgiejTKpLa5LieGO5DqzuE3t31qsYcbd
+-- \restrict xMBC3k7mJvz5ev9daHY5o44Q6wOEugHlrLYNDQT9RxKWDmlFCy91qb5dq6JNwlY
 
 -- Dumped from database version 15.8
 -- Dumped by pg_dump version 17.11
@@ -9613,7 +9613,7 @@ COPY "public"."classlists" ("student_id", "name", "class", "created_at", "update
 29604	Yayar	M3-4A	2026-05-16 01:07:13.169301+00	2026-09-22 02:20:17.125882+00	\N	$2a$10$tpVGrxEn4TDr2jHDppsOMe7WViYWU1D/AD04.rbzcBVP89K65MW2S	F
 29793	Charles	M3-5A	2026-05-16 01:07:12.299036+00	2026-09-22 02:20:54.417541+00	\N	$2a$10$DzGa46.udXLWgzuGq/NF7u.X9U/mLrNnIb7lHuNHuJ72POfxRaQmO	M
 35994	Tee	M2-4A	2026-05-24 09:52:27.667233+00	2026-09-22 02:21:33.259227+00	\N	$2a$10$yc9nZvgTExTefSmh4YefCO4K.M9T/q5b76OTik468vecKcs6YHUSi	M
-30321	Alin	M2-4A	2026-05-24 09:52:27.667233+00	2026-09-22 02:21:33.259227+00	\N	$2a$10$hGfTiuD2KIxxmyc2nUkFeOTa5zNKo4Zr3u1RmuZiPjUuNKGpWGYIG	F
+37821	David	M3-4A	2026-11-01 14:13:32.767532+00	2026-11-01 07:30:20.256848+00	\N	$2a$10$lI4EU2Br31mU/0odsxWxQem7glPJg5fJs0WlB8W7yXwIFZ0PedoLe	M
 30055	Jomtub	M3-3A	2026-05-16 01:07:12.051389+00	2026-09-22 02:19:22.033108+00	\N	$2a$10$JqZoX9xsGyp97huU2xiwWuYO2p1WmZvvYC.NBzwFDLYlaqjD582/C	M
 34174	Krabi	M3-3A	2026-05-16 01:07:12.647782+00	2026-09-22 02:19:22.033108+00	\N	$2a$10$ayPpmeM9wlpm2AxhqX4X6OJeHVYnuXUine6xgXVwE9ZnSNx/CEMkS	M
 29866	Mawin	M3-3A	2026-05-16 01:07:13.05753+00	2026-09-22 02:19:22.033108+00	\N	$2a$10$h6IzKX..2pitryxwWLuIWeLNKZcllQZ2DZPC3qESee.Vm8jPsFR8m	M
@@ -12137,7 +12137,6 @@ COPY "public"."linguistic_features" ("id", "text_id", "features", "analysis_meta
 --
 
 COPY "public"."password_recovery" ("student_id", "password", "created_at", "name", "class") FROM stdin;
-30321	honda_civic	2026-09-04 14:36:15.600367+00	Alin	M2-4A
 35994	suzuki_gsxr	2026-09-04 14:36:15.600367+00	Tee	M2-4A
 33919	sunflower	2026-09-04 14:36:15.600367+00	Fuji	M3-3A
 30055	lavender	2026-09-04 14:36:15.600367+00	Jomtub	M3-3A
@@ -12233,6 +12232,7 @@ COPY "public"."password_recovery" ("student_id", "password", "created_at", "name
 36171	beanie	2026-09-04 14:36:15.600367+00	Tietie	M2-5A
 30847	gloves	2026-09-04 14:36:15.600367+00	Tonnam	M2-5A
 36036	fedora	2026-09-04 14:36:15.600367+00	Yada	M2-5A
+37821	lebron	2026-11-01 14:15:02.907081+00	David	M3-4A
 \.
 
 
@@ -16274,6 +16274,6 @@ SELECT pg_catalog.setval('"public"."student_submissions_id_seq"', 4145, true);
 -- PostgreSQL database dump complete
 --
 
--- \unrestrict NsjddioG9qLDdOe6LX1uIohb4ME7sU8cgiejTKpLa5LieGO5DqzuE3t31qsYcbd
+-- \unrestrict xMBC3k7mJvz5ev9daHY5o44Q6wOEugHlrLYNDQT9RxKWDmlFCy91qb5dq6JNwlY
 
 RESET ALL;
