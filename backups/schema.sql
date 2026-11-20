@@ -775,6 +775,112 @@ CREATE TABLE IF NOT EXISTS "public"."cefr_levels" (
 ALTER TABLE "public"."cefr_levels" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."current_affairs_answers" (
+    "id" bigint NOT NULL,
+    "student_id" "text" NOT NULL,
+    "quiz_id" "text" NOT NULL,
+    "number" integer NOT NULL,
+    "answer" "text",
+    "ocr_confidence" numeric(3,2),
+    "ocr_image" "text",
+    "facts" "jsonb",
+    "votes" "jsonb",
+    "agreement" "text",
+    "mark" numeric(3,2),
+    "judged_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "class_name" "text",
+    CONSTRAINT "cafa_agreement_words" CHECK ((("agreement" IS NULL) OR ("agreement" = ANY (ARRAY['unanimous'::"text", 'majority'::"text", 'tiebreak'::"text"])))),
+    CONSTRAINT "cafa_mark_quarters" CHECK ((("mark" IS NULL) OR ("mod"(("mark" * (4)::numeric), (1)::numeric) = (0)::numeric))),
+    CONSTRAINT "cafa_question_number" CHECK ((("number" >= 1) AND ("number" <= 5)))
+);
+
+
+ALTER TABLE "public"."current_affairs_answers" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."current_affairs_answers" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."current_affairs_answers_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."current_affairs_quizzes" (
+    "quiz_id" "text" NOT NULL,
+    "quiz_number" integer NOT NULL,
+    "quiz_date" "date" NOT NULL,
+    "topic" "text" NOT NULL,
+    "max_marks" numeric(4,2) DEFAULT 5 NOT NULL,
+    "question_count" integer DEFAULT 5 NOT NULL,
+    "key_hash" "text" NOT NULL,
+    "published_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "key" "jsonb"
+);
+
+
+ALTER TABLE "public"."current_affairs_quizzes" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."current_affairs_scores" (
+    "id" bigint NOT NULL,
+    "student_id" "text" NOT NULL,
+    "name" "text" NOT NULL,
+    "class_name" "text" NOT NULL,
+    "academic_year" integer NOT NULL,
+    "term" "text" NOT NULL,
+    "assessment_type" "text" DEFAULT 'CA'::"text" NOT NULL,
+    "quiz_id" "text" NOT NULL,
+    "quiz_score" numeric(4,2) NOT NULL,
+    "status" "text" DEFAULT 'marked'::"text" NOT NULL,
+    "marked_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "cafs_quarter_marks" CHECK ((("quiz_score" >= (0)::numeric) AND ("mod"(("quiz_score" * (4)::numeric), (1)::numeric) = (0)::numeric))),
+    CONSTRAINT "cafs_status_vocabulary" CHECK (("status" = ANY (ARRAY['marked'::"text", 'provisional'::"text", 'absent'::"text"])))
+);
+
+
+ALTER TABLE "public"."current_affairs_scores" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."current_affairs_scores" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."current_affairs_scores_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE OR REPLACE VIEW "public"."current_affairs_scores_v" AS
+ SELECT "s"."student_id",
+    "s"."name",
+    "s"."class_name",
+    "s"."quiz_id",
+    "q"."quiz_date",
+    "s"."quiz_score",
+    "q"."max_marks" AS "quiz_max",
+    "sum"("s"."quiz_score") OVER "w" AS "cumulative_score",
+    "sum"("q"."max_marks") OVER "w" AS "cumulative_possible",
+    "count"(*) OVER "w" AS "quizzes_taken",
+    ("sum"("s"."quiz_score") OVER "w" - "first_value"("s"."quiz_score") OVER "w") AS "improvement_since_base"
+   FROM ("public"."current_affairs_scores" "s"
+     JOIN "public"."current_affairs_quizzes" "q" ON (("q"."quiz_id" = "s"."quiz_id")))
+  WHERE ("s"."status" = 'marked'::"text")
+  WINDOW "w" AS (PARTITION BY "s"."student_id" ORDER BY "q"."quiz_date" ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW);
+
+
+ALTER VIEW "public"."current_affairs_scores_v" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."egp_statements" (
     "id" "text" NOT NULL,
     "statement" "text" NOT NULL,
@@ -1194,6 +1300,16 @@ ALTER TABLE ONLY "public"."student_submissions" ALTER COLUMN "id" SET DEFAULT "n
 
 
 
+ALTER TABLE ONLY "public"."current_affairs_answers"
+    ADD CONSTRAINT "cafa_one_row_per_answer" UNIQUE ("student_id", "quiz_id", "number");
+
+
+
+ALTER TABLE ONLY "public"."current_affairs_scores"
+    ADD CONSTRAINT "cafs_one_row_per_student_per_quiz" UNIQUE ("student_id", "quiz_id");
+
+
+
 ALTER TABLE ONLY "public"."cambridge-listening-grades"
     ADD CONSTRAINT "cambridge-listening-grades_pkey" PRIMARY KEY ("id");
 
@@ -1211,6 +1327,21 @@ ALTER TABLE ONLY "public"."cefr_levels"
 
 ALTER TABLE ONLY "public"."classlists"
     ADD CONSTRAINT "classlists_pkey" PRIMARY KEY ("student_id");
+
+
+
+ALTER TABLE ONLY "public"."current_affairs_answers"
+    ADD CONSTRAINT "current_affairs_answers_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."current_affairs_quizzes"
+    ADD CONSTRAINT "current_affairs_quizzes_pkey" PRIMARY KEY ("quiz_id");
+
+
+
+ALTER TABLE ONLY "public"."current_affairs_scores"
+    ADD CONSTRAINT "current_affairs_scores_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1281,6 +1412,30 @@ ALTER TABLE ONLY "public"."student_submissions_writing_ielts"
 
 ALTER TABLE ONLY "public"."text_samples"
     ADD CONSTRAINT "text_samples_pkey" PRIMARY KEY ("id");
+
+
+
+CREATE INDEX "cafa_class_idx" ON "public"."current_affairs_answers" USING "btree" ("class_name", "quiz_id");
+
+
+
+CREATE INDEX "cafa_quiz_idx" ON "public"."current_affairs_answers" USING "btree" ("quiz_id", "student_id");
+
+
+
+CREATE INDEX "cafa_student_idx" ON "public"."current_affairs_answers" USING "btree" ("student_id");
+
+
+
+CREATE INDEX "cafs_quiz_class_idx" ON "public"."current_affairs_scores" USING "btree" ("quiz_id", "class_name");
+
+
+
+CREATE INDEX "cafs_student_idx" ON "public"."current_affairs_scores" USING "btree" ("student_id");
+
+
+
+CREATE INDEX "cafs_year_term_idx" ON "public"."current_affairs_scores" USING "btree" ("academic_year", "assessment_type");
 
 
 
@@ -1358,6 +1513,16 @@ CREATE OR REPLACE TRIGGER "trigger_update_overall_cefr" BEFORE INSERT OR UPDATE 
 
 ALTER TABLE ONLY "public"."classlists"
     ADD CONSTRAINT "classlists_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."current_affairs_answers"
+    ADD CONSTRAINT "current_affairs_answers_quiz_id_fkey" FOREIGN KEY ("quiz_id") REFERENCES "public"."current_affairs_quizzes"("quiz_id");
+
+
+
+ALTER TABLE ONLY "public"."current_affairs_scores"
+    ADD CONSTRAINT "current_affairs_scores_quiz_id_fkey" FOREIGN KEY ("quiz_id") REFERENCES "public"."current_affairs_quizzes"("quiz_id") ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 
@@ -1463,6 +1628,15 @@ ALTER TABLE "public"."cambridge_reading_grades" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."classlists" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."current_affairs_answers" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."current_affairs_quizzes" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."current_affairs_scores" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."error_reports" ENABLE ROW LEVEL SECURITY;
@@ -1773,6 +1947,42 @@ GRANT ALL ON SEQUENCE "public"."cambridge_reading_grades_id_seq" TO "service_rol
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."cefr_levels" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_answers" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_answers" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_answers" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."current_affairs_answers_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."current_affairs_answers_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."current_affairs_answers_id_seq" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_quizzes" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_quizzes" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_quizzes" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_scores" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_scores" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_scores" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."current_affairs_scores_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."current_affairs_scores_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."current_affairs_scores_id_seq" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_scores_v" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_scores_v" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."current_affairs_scores_v" TO "service_role";
 
 
 
