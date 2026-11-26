@@ -1102,12 +1102,27 @@ CREATE TABLE IF NOT EXISTS "public"."speaking_assessment_cambridge" (
     "exam_type" "text" NOT NULL,
     "duration_seconds" numeric,
     "audio_url" "text",
+    "arguments_ideas_evidence" numeric,
+    "arguments_ideas_evidence_feedback" "text",
     CONSTRAINT "speaking_assessment_cambridge_assessment_type_check" CHECK (("assessment_type" = ANY (ARRAY['CA'::"text", 'Formative'::"text", 'Term 1 Finals'::"text", 'Term 2 Finals'::"text"]))),
-    CONSTRAINT "speaking_assessment_cambridge_exam_type_check" CHECK (("exam_type" = ANY (ARRAY['KEY'::"text", 'PET'::"text", 'FIRST'::"text"])))
+    CONSTRAINT "speaking_assessment_cambridge_exam_type_check" CHECK (("exam_type" = ANY (ARRAY['KEY'::"text", 'PET'::"text", 'FIRST'::"text", 'bespoke'::"text"])))
 );
 
 
 ALTER TABLE "public"."speaking_assessment_cambridge" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."spelling" (
+    "created" timestamp with time zone NOT NULL,
+    "student_id" bigint NOT NULL
+);
+
+
+ALTER TABLE "public"."spelling" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."spelling" IS 'Repository of spelling performance for CEL students';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."student_submissions" (
@@ -1420,6 +1435,11 @@ ALTER TABLE ONLY "public"."speaking_assessment_cambridge"
 
 
 
+ALTER TABLE ONLY "public"."spelling"
+    ADD CONSTRAINT "spelling_pkey" PRIMARY KEY ("created");
+
+
+
 ALTER TABLE ONLY "public"."student_submissions"
     ADD CONSTRAINT "student_submissions_pkey" PRIMARY KEY ("id");
 
@@ -1670,6 +1690,9 @@ CREATE POLICY "service_role_all" ON "public"."speaking_assessment_cambridge" TO 
 
 
 ALTER TABLE "public"."speaking_assessment_cambridge" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."spelling" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."student_submissions" ENABLE ROW LEVEL SECURITY;
@@ -2046,6 +2069,12 @@ GRANT ALL ON SEQUENCE "public"."reports_id_seq" TO "service_role";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."speaking_assessment_cambridge" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."speaking_assessment_cambridge" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."speaking_assessment_cambridge" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."spelling" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."spelling" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE "public"."spelling" TO "service_role";
 
 
 
